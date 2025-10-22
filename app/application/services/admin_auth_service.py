@@ -50,17 +50,6 @@ class AdminAuthService:
         logger.info("Creating default administrator account for %s", normalized_email)
         return self._persistence.create_user(email=normalized_email, password_hash=hashed)
 
-    def register(self, email: str, password: str) -> User:
-        email_clean = email.strip().lower()
-        if not email_clean:
-            raise ValueError("E-mail é obrigatório.")
-        if not password or len(password) < 6:
-            raise ValueError("Senha deve ter ao menos 6 caracteres.")
-        if self._persistence.get_user_by_email(email_clean):
-            raise ValueError("Já existe um administrador com este e-mail.")
-        hashed = self._pwd.hash(self._truncate_password(password))
-        return self._persistence.create_user(email=email_clean, password_hash=hashed)
-
     def authenticate(self, email: str, password: str) -> str:
         email_clean = email.strip().lower()
         user = self._persistence.get_user_by_email(email_clean)
