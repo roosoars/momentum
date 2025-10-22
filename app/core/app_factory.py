@@ -64,7 +64,7 @@ def _create_lifespan(settings: Settings):
         )
         stream_manager = MessageStreamManager()
         auth_service = AuthService(telegram, persistence)
-        channel_service = ChannelService(telegram, persistence)
+        channel_service = ChannelService(telegram, persistence, persistence, stream_manager)
         message_service = MessageQueryService(persistence)
 
         container = ApplicationContainer(

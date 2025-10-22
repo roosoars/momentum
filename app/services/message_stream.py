@@ -52,3 +52,7 @@ class MessageStreamManager:
                 for websocket in remove:
                     if websocket in self._connections:
                         self._connections.remove(websocket)
+
+    async def broadcast_history(self, messages: List[Dict]) -> None:
+        payload = {"type": "history", "data": jsonable_encoder(messages)}
+        await self._broadcast(payload)

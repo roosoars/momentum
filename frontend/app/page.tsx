@@ -17,6 +17,7 @@ type ConfigResponse = {
   channel_title: string | null;
   last_input: string | null;
   status: AuthStatus;
+  capture_state?: CaptureState;
 };
 
 type MessageItem = {
@@ -37,6 +38,11 @@ type ChannelOption = {
   title: string;
   username?: string | null;
   type?: string | null;
+};
+
+type CaptureState = {
+  active: boolean;
+  paused: boolean;
 };
 
 const resolveApiBaseOnServer = () => {
@@ -111,6 +117,7 @@ export default function DashboardPage() {
   const [banner, setBanner] = useState<Banner | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
   const [channelOptions, setChannelOptions] = useState<ChannelOption[]>([]);
+  const [captureState, setCaptureState] = useState<CaptureState | null>(null);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -124,6 +131,14 @@ export default function DashboardPage() {
     () => config?.channel_id ?? authStatus?.channel_id ?? null,
     [config?.channel_id, authStatus?.channel_id]
   );
+
+  const isCaptureActive = captureState?.active ?? false;
+  const isCapturePaused = captureState?.paused ?? false;
+  const captureStatusLabel = !isCaptureActive
+    ? "Captura parada"
+    : isCapturePaused
+      ? "Captura pausada"
+      : "Captura em andamento";
 
   const postJSON = async (path: string, body?: unknown) => {
     const response = await fetch(`${apiBase}${path}`, {
@@ -190,6 +205,11 @@ export default function DashboardPage() {
       setConfig(data);
       if (!channelInput) {
         setChannelInput(data.last_input ?? "");
+      }
+      if (data.capture_state) {
+        setCaptureState(data.capture_state);
+      } else if (data.status?.capture) {
+        setCaptureState(data.status.capture as CaptureState);
       }
     } catch (error) {
       console.error("config", error);
@@ -365,10 +385,11 @@ export default function DashboardPage() {
     setLoadingKey("channel");
     setBanner(null);
     try {
-      await postJSON("/api/config/channel", {
+      const result = await postJSON("/api/config/channel", {
         channel_id: channelInput.trim(),
         reset_history: resetHistory
       });
+      updateCaptureState(result?.capture_state ?? null);
       setBanner({
         type: "success",
         message: "Canal atualizado com sucesso."
@@ -406,6 +427,45 @@ export default function DashboardPage() {
       setLoadingKey(null);
     }
   };
+
+  const updateCaptureState = (state?: CaptureState | null) => {
+    if (state) {
+      setCaptureState(state);
+    }
+  };
+
+  const handleCaptureAction = async (
+    path: string,
+    successMessage: string,
+    key: string,
+    onSuccess?: () => void
+  ) => {
+    setLoadingKey(key);
+    setBanner(null);
+    try {
+      const data = await postJSON(path);
+      updateCaptureState(data?.capture_state ?? data?.state ?? null);
+      setBanner({ type: "success", message: successMessage });
+      if (onSuccess) {
+        onSuccess();
+      }
+      await refreshConfig(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Ação não concluída.";
+      setBanner({ type: "error", message });
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
+  const handlePauseCapture = () => handleCaptureAction("/api/config/capture/pause", "Captura pausada.", "pause");
+  const handleResumeCapture = () => handleCaptureAction("/api/config/capture/resume", "Captura retomada.", "resume");
+  const handleStopCapture = () => handleCaptureAction("/api/config/capture/stop", "Captura interrompida.", "stop");
+  const handleStartCapture = () => handleCaptureAction("/api/config/capture/start", "Captura iniciada.", "start");
+  const handleClearHistory = () =>
+    handleCaptureAction("/api/config/capture/clear-history", "Histórico limpo.", "clear", () => {
+      setMessages([]);
+    });
 
   return (
     <div className="min-h-screen pb-12">
@@ -595,6 +655,60 @@ export default function DashboardPage() {
                       </p>
                     </>
                   )}
+                </div>
+
+                <div className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-200">
+                    <span
+                      className={`h-2 w-2 rounded-full ${!isCaptureActive ? "bg-rose-400" : isCapturePaused ? "bg-amber-300" : "bg-emerald-400"}`}
+                    />
+                    {captureStatusLabel}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Controle a ingestão de mensagens sem perder a configuração atual do canal.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "start" || isCaptureActive}
+                    >
+                      Iniciar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePauseCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-amber-500 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "pause" || !isCaptureActive || isCapturePaused}
+                    >
+                      Pausar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResumeCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "resume" || !isCapturePaused || !isCaptureActive}
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-rose-500 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "stop" || !isCaptureActive}
+                    >
+                      Parar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearHistory}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-500 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "clear"}
+                    >
+                      Apagar histórico
+                    </button>
+                  </div>
                 </div>
 
                 <label className="inline-flex items-center gap-3 text-sm text-slate-300">
