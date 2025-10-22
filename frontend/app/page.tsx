@@ -208,8 +208,6 @@ export default function DashboardPage() {
       }
       if (data.capture_state) {
         setCaptureState(data.capture_state);
-      } else if (data.status?.capture) {
-        setCaptureState(data.status.capture as CaptureState);
       }
     } catch (error) {
       console.error("config", error);
