@@ -2,7 +2,7 @@
 
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
-type TabKey = "home" | "strategies" | "telegram" | "admin";
+type TabKey = "home" | "strategies" | "telegram" | "signals";
 
 type Banner = {
   type: "success" | "error";
@@ -78,8 +78,9 @@ type ChannelOption = {
 type NavItem = {
   id: TabKey;
   label: string;
-  description: string;
+  description?: string;
   icon: JSX.Element;
+  mobileOnly?: boolean;
 };
 
 const STORAGE_KEY = "momentum:admin-token";
@@ -115,10 +116,11 @@ const TelegramIcon = () => (
   </svg>
 );
 
-const UserIcon = () => (
+const SignalIcon = () => (
   <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-    <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M4 20.75a8 8 0 0 1 16 0" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M3 17.25 9.25 11 14 15.75 21 9" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M21 9h-4.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M21 13.5v-4.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -142,10 +144,11 @@ const NAV_ITEMS: NavItem[] = [
     icon: <TelegramIcon />
   },
   {
-    id: "admin",
-    label: "Admin",
-    description: "Conta e segurança",
-    icon: <UserIcon />
+    id: "signals",
+    label: "Sinais",
+    description: "Últimos alertas",
+    icon: <SignalIcon />,
+    mobileOnly: true
   }
 ];
 
@@ -276,10 +279,10 @@ export default function DashboardPage() {
       }));
       setAvailableChannels(normalised);
     } catch (error) {
-      setBanner({
-        type: "error",
-        message: error instanceof Error ? error.message : "Erro ao listar canais disponíveis."
-      });
+      const message = error instanceof Error ? error.message : "Erro ao listar canais disponíveis.";
+      if (!message.toLowerCase().includes("autentique")) {
+        setBanner({ type: "error", message });
+      }
     } finally {
       setChannelsLoading(false);
     }
@@ -378,18 +381,18 @@ export default function DashboardPage() {
     }
   }, [apiFetch, token]);
 
-  const handleCreateStrategy = useCallback(
-    async (name: string, channelIdentifier: string, activate: boolean) => {
-      setActionLoading("create-strategy");
-      try {
-        await apiFetch<StrategyItem>("/api/strategies", {
-          method: "POST",
-          body: JSON.stringify({ name, channel_identifier: channelIdentifier, activate })
-        });
-        await fetchStrategies();
-        setBanner({ type: "success", message: "Estratégia criada." });
-      } catch (error) {
-        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao criar estratégia." });
+const handleCreateStrategy = useCallback(
+  async (name: string, channelIdentifier: string) => {
+    setActionLoading("create-strategy");
+    try {
+      await apiFetch<StrategyItem>("/api/strategies", {
+        method: "POST",
+        body: JSON.stringify({ name, channel_identifier: channelIdentifier, activate: false })
+      });
+      await fetchStrategies();
+      setBanner({ type: "success", message: "Estratégia criada." });
+    } catch (error) {
+      setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao criar estratégia." });
       } finally {
         setActionLoading(null);
       }
@@ -621,7 +624,16 @@ export default function DashboardPage() {
           onControlCapture={controlCapture}
         />
       )}
-      {activeTab === "admin" && <AdminTab profile={adminProfile} />}
+      {activeTab === "signals" && (
+        <SignalsTab
+          strategies={strategies}
+          selectedStrategyId={selectedStrategyId}
+          onSelectStrategy={setSelectedStrategyId}
+          signals={activeSignals}
+          onRefreshSignals={() => (selectedStrategyId ? fetchSignals(selectedStrategyId) : Promise.resolve())}
+          loading={actionLoading === "refresh-signals"}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -694,16 +706,18 @@ type DashboardLayoutProps = {
 };
 
 function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfile, children }: DashboardLayoutProps) {
+  const desktopNavItems = NAV_ITEMS.filter(item => !item.mobileOnly);
+  const mobileNavItems = NAV_ITEMS;
+  const currentNav = NAV_ITEMS.find(item => item.id === activeTab);
+
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
       <aside className="hidden w-72 flex-col border-r border-slate-900 bg-slate-950/80 px-4 py-6 md:flex">
-        <div className="mb-8 space-y-1">
-          <span className="text-xs font-semibold uppercase tracking-widest text-blue-400">Momentum</span>
-          <h2 className="text-xl font-semibold text-slate-50">Painel Administrativo</h2>
-          <p className="text-xs text-slate-500">Controle estratégias de sinal, integrações e captura do Telegram.</p>
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold uppercase tracking-[0.4em] text-blue-300">Momentum</h2>
         </div>
         <nav className="flex flex-1 flex-col gap-2">
-          {NAV_ITEMS.map(item => (
+          {desktopNavItems.map(item => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
@@ -716,7 +730,7 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
               <span className={`rounded-lg border ${activeTab === item.id ? "border-blue-500/40 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"} p-2 text-sm`}>{item.icon}</span>
               <span>
                 <span className="block text-sm font-semibold">{item.label}</span>
-                <span className="block text-xs text-slate-500">{item.description}</span>
+                {item.description && <span className="block text-xs text-slate-500">{item.description}</span>}
               </span>
             </button>
           ))}
@@ -735,7 +749,7 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
           <div className="flex items-center justify-between">
             <div>
               <span className="text-xs uppercase tracking-widest text-blue-400">Momentum</span>
-              <h1 className="text-lg font-semibold text-slate-50">{NAV_ITEMS.find(item => item.id === activeTab)?.label}</h1>
+              <h1 className="text-lg font-semibold text-slate-50">{currentNav?.label ?? "Painel"}</h1>
             </div>
             <button onClick={onLogout} className="rounded-lg border border-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300">
               Sair
@@ -752,7 +766,7 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
         </main>
         <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur md:hidden">
           <ul className="flex items-stretch justify-around">
-            {NAV_ITEMS.map(item => (
+            {mobileNavItems.map(item => (
               <li key={item.id}>
                 <button
                   onClick={() => setActiveTab(item.id)}
@@ -814,70 +828,146 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
         />
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <section className="flex flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-50">Sinais interpretados</h3>
-              <p className="text-sm text-slate-500">Filtre por estratégia para acompanhar as últimas entradas estruturadas pela IA.</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={selectedStrategyId ?? ""}
-                onChange={event => handleSelect(event.target.value)}
-                className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              >
-                <option value="" disabled>
-                  Selecione uma estratégia
-                </option>
-                {strategies.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} {item.status !== "active" ? `(${item.status})` : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={onRefreshSignals}
-                disabled={!selectedStrategyId || loading}
-                className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                Atualizar
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
-            {!selectedStrategy ? (
-              <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-                Escolha uma estratégia para visualizar os sinais mais recentes.
-              </div>
-            ) : signals.length === 0 ? (
-              <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-                Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
-              </div>
-            ) : (
-              <div className="max-h-[460px] space-y-3 overflow-y-auto px-4 py-4 pr-2">
-                {signals.map(signal => (
-                  <SignalCard key={signal.id} signal={signal} strategyName={selectedStrategy.name} />
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <h3 className="text-lg font-semibold text-slate-50">Sessão do Telegram</h3>
+        <p className="mt-2 text-sm text-slate-500">Status atualizado da conexão 24/7 com a conta que alimenta as estratégias.</p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatusBadge label="Conexão" value={telegramStatus?.connected ? "Online" : "Offline"} variant={telegramStatus?.connected ? "emerald" : "slate"} />
+          <StatusBadge label="Autorização" value={telegramStatus?.authorized ? "Autorizado" : "Pendente"} variant={telegramStatus?.authorized ? "emerald" : "amber"} />
+          <StatusBadge label="Telefone" value={telegramStatus?.phone_number ?? telegramStatus?.pending_phone ?? "Não informado"} variant="slate" />
+          <StatusBadge
+            label="Canais monitorados"
+            value={(telegramStatus?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
+            variant="slate"
+          />
+        </div>
+      </section>
 
-        <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-          <h3 className="text-lg font-semibold text-slate-50">Sessão do Telegram</h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <StatusBadge label="Conexão" value={telegramStatus?.connected ? "Online" : "Offline"} variant={telegramStatus?.connected ? "emerald" : "slate"} />
-            <StatusBadge label="Autorização" value={telegramStatus?.authorized ? "Autorizado" : "Pendente"} variant={telegramStatus?.authorized ? "emerald" : "amber"} />
-            <StatusBadge label="Telefone" value={telegramStatus?.phone_number ?? telegramStatus?.pending_phone ?? "Não informado"} variant="slate" />
-            <StatusBadge
-              label="Canais ativos"
-              value={(telegramStatus?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
-              variant="slate"
-            />
+      <section className="hidden flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30 md:flex">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Sinais interpretados</h3>
+            <p className="text-sm text-slate-500">Filtre por estratégia para acompanhar as últimas entradas estruturadas pela IA.</p>
           </div>
-        </section>
-      </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedStrategyId ?? ""}
+              onChange={event => handleSelect(event.target.value)}
+              className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <option value="" disabled>
+                Selecione uma estratégia
+              </option>
+              {strategies.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} {item.status !== "active" ? `(${item.status})` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={onRefreshSignals}
+              disabled={!selectedStrategyId || loading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              Atualizar
+            </button>
+          </div>
+        </div>
+        <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
+          {!selectedStrategy ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Escolha uma estratégia para visualizar os sinais mais recentes.
+            </div>
+          ) : signals.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
+            </div>
+          ) : (
+            <div className="flex h-full flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
+              {signals.map(signal => (
+                <SignalCard key={signal.id} signal={signal} strategyName={selectedStrategy.name} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 text-sm text-slate-400 md:hidden">
+        <h3 className="text-base font-semibold text-slate-100">Sinais interpretados</h3>
+        <p className="mt-2">Acesse a aba “Sinais” na barra inferior para acompanhar os sinais processados em detalhes.</p>
+      </section>
+    </div>
+  );
+}
+
+type SignalsTabProps = {
+  strategies: StrategyItem[];
+  selectedStrategyId: number | null;
+  onSelectStrategy: (id: number | null) => void;
+  signals: StrategySignal[];
+  onRefreshSignals: () => Promise<void>;
+  loading: boolean;
+};
+
+function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading }: SignalsTabProps) {
+  const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
+
+  const handleSelect = (value: string) => {
+    if (!value) {
+      onSelectStrategy(null);
+      return;
+    }
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      onSelectStrategy(parsed);
+    }
+  };
+
+  return (
+    <div className="flex min-h-full flex-col gap-4 md:hidden">
+      <header className="space-y-2 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <h2 className="text-lg font-semibold text-slate-50">Sinais interpretados</h2>
+        <p className="text-sm text-slate-500">Selecione uma estratégia para acompanhar as entradas geradas pela IA.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedStrategyId ?? ""}
+            onChange={event => handleSelect(event.target.value)}
+            className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          >
+            <option value="" disabled>
+              Selecione uma estratégia
+            </option>
+            {strategies.map(item => (
+              <option key={item.id} value={item.id}>
+                {item.name} {item.status !== "active" ? `(${item.status})` : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={onRefreshSignals}
+            disabled={!selectedStrategyId || loading}
+            className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            Atualizar
+          </button>
+        </div>
+      </header>
+
+      {!selectedStrategy ? (
+        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
+          Escolha uma estratégia acima para visualizar os sinais mais recentes.
+        </div>
+      ) : signals.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
+          Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
+          {signals.map(signal => (
+            <SignalCard key={signal.id} signal={signal} strategyName={selectedStrategy.name} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -973,7 +1063,7 @@ function SignalCard({ signal, strategyName }: SignalCardProps) {
 type StrategiesTabProps = {
   strategies: StrategyItem[];
   actionLoading: string | null;
-  onCreate: (name: string, channelIdentifier: string, activate: boolean) => Promise<void>;
+  onCreate: (name: string, channelIdentifier: string) => Promise<void>;
   onRename: (strategyId: number, name: string) => Promise<void>;
   onAssignChannel: (strategyId: number, channelIdentifier: string) => Promise<void>;
   onDelete: (strategyId: number) => Promise<void>;
@@ -999,14 +1089,13 @@ function StrategiesTab({
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
-  const [activate, setActivate] = useState(true);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedChannel) {
       return;
     }
-    await onCreate(name, selectedChannel, activate);
+    await onCreate(name, selectedChannel);
     setName("");
     setSelectedChannel("");
   };
@@ -1069,15 +1158,11 @@ function StrategiesTab({
                 : "Nenhum canal listado ainda. Atualize após autenticar a sessão no Telegram."}
             </p>
           </div>
-          <label className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-            <input type="checkbox" checked={activate} onChange={event => setActivate(event.target.checked)} className="rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500" />
-            Iniciar captura imediatamente (máx. 5 estratégias ativas)
-          </label>
           <div className="md:col-span-4 flex justify-end">
             <button
               type="submit"
               disabled={actionLoading === "create-strategy" || !canSubmit}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-700"
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
             >
               {actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
             </button>
@@ -1292,7 +1377,9 @@ function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onV
 
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <h3 className="text-lg font-semibold text-slate-50">Controles de captura</h3>
-        <p className="text-sm text-slate-500">Gerencie a ingestão de mensagens em tempo real. As estratégias configuradas continuarão vinculadas aos canais definidos.</p>
+        <p className="text-sm text-slate-500">
+          Use estes comandos para pausar ou retomar o listener global quando necessário. As estratégias permanecem vinculadas aos canais configurados.
+        </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <CaptureButton label="Iniciar" action="start" loading={actionLoading} onAction={onControlCapture} />
           <CaptureButton label="Pausar" action="pause" loading={actionLoading} onAction={onControlCapture} />
@@ -1300,9 +1387,13 @@ function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onV
           <CaptureButton label="Parar" action="stop" loading={actionLoading} onAction={onControlCapture} />
           <CaptureButton label="Limpar histórico" action="clear-history" loading={actionLoading} onAction={onControlCapture} />
         </div>
-        <div className="mt-6 rounded-xl border border-slate-900 bg-slate-900/40 p-4 text-sm text-slate-400">
+        <div className="mt-6 rounded-xl border border-slate-900 bg-slate-900/40 p-4 text-xs text-slate-400">
           <p>
-            Canais ativos: {(config?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}. A gestão principal dos canais deve ser realizada nas estratégias.
+            Estado atual:{" "}
+            {status?.capture?.active ? (status.capture.paused ? "Captura pausada" : "Captura em execução") : "Captura desligada"}.
+          </p>
+          <p className="mt-1">
+            Monitorando: {(config?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum canal selecionado."}
           </p>
         </div>
       </section>
@@ -1327,36 +1418,6 @@ function CaptureButton({ label, action, loading, onAction }: CaptureButtonProps)
     >
       {busy ? "Aguarde..." : label}
     </button>
-  );
-}
-
-type AdminTabProps = {
-  profile: AdminProfile | null;
-};
-
-function AdminTab({ profile }: AdminTabProps) {
-  return (
-    <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-      <h3 className="text-lg font-semibold text-slate-50">Perfil administrativo</h3>
-      {profile ? (
-        <div className="mt-4 space-y-2 text-sm text-slate-400">
-          <p>
-            <span className="text-slate-500">E-mail:</span> {profile.email}
-          </p>
-          <p>
-            <span className="text-slate-500">Criado em:</span> {formatDateTime(profile.created_at)}
-          </p>
-          <p>
-            <span className="text-slate-500">Última atualização:</span> {formatDateTime(profile.updated_at)}
-          </p>
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-slate-400">Não foi possível carregar os dados do administrador.</p>
-      )}
-      <p className="mt-6 text-xs text-slate-500">
-        Para prover acesso a novos administradores, cadastre-os diretamente no banco ou exponha um fluxo controlado fora deste painel.
-      </p>
-    </section>
   );
 }
 

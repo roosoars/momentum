@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 class StrategyCreatePayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=80)
     channel_identifier: str = Field(..., min_length=1, max_length=120)
-    activate: bool = Field(default=True)
+    activate: bool = Field(default=False)
 
 
 class StrategyRenamePayload(BaseModel):

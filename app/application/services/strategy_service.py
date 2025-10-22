@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from ...domain.models import Strategy, StrategySignal
@@ -30,7 +30,7 @@ class StrategyService:
         self._strategies: Dict[int, Strategy] = {}
         self._channel_index: Dict[str, List[int]] = {}
         self._lock = asyncio.Lock()
-        self._initialized_at = datetime.utcnow()
+        self._initialized_at = datetime.now(timezone.utc)
 
     # ------------------------------------------------------------------
     async def initialize(self) -> None:
@@ -38,7 +38,7 @@ class StrategyService:
             items = self._persistence.get_strategies()
             self._strategies = {item.id: item for item in items}
             self._rebuild_channel_index_locked()
-            self._initialized_at = datetime.utcnow()
+            self._initialized_at = datetime.now(timezone.utc)
         await self._synchronise_channels()
 
     # Public query helpers -------------------------------------------------
@@ -73,7 +73,7 @@ class StrategyService:
         name: str,
         channel_identifier: str,
         *,
-        activate: bool = True,
+        activate: bool = False,
     ) -> Strategy:
         clean_name = name.strip()
         clean_identifier = channel_identifier.strip()
@@ -85,7 +85,7 @@ class StrategyService:
         channel_info = await self._telegram.resolve_channel(clean_identifier)
         canonical_id = str(channel_info["channel_id"])
         canonical_title = channel_info.get("title")
-        linked_at = datetime.utcnow().replace(microsecond=0).isoformat()
+        linked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
         async with self._lock:
             if activate and self._count_active_locked() >= self.MAX_ACTIVE_STRATEGIES:
@@ -122,7 +122,7 @@ class StrategyService:
         channel_info = await self._telegram.resolve_channel(clean_identifier)
         canonical_id = str(channel_info["channel_id"])
         canonical_title = channel_info.get("title")
-        linked_at = datetime.utcnow().replace(microsecond=0).isoformat()
+        linked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
         async with self._lock:
             strategy = self._require_strategy_locked(strategy_id)
@@ -205,7 +205,8 @@ class StrategyService:
         if telegram_id <= 0:
             return
 
-        created_at = self._parse_timestamp(message.get("created_at")) or datetime.utcnow()
+        created_at = self._parse_timestamp(message.get("created_at")) or datetime.now(timezone.utc)
+        created_at = self._to_utc(created_at)
         if created_at < self._initialized_at:
             return
         raw_message = message.get("message")
@@ -219,7 +220,8 @@ class StrategyService:
         for strategy in strategies:
             if not strategy.is_active or strategy.is_paused:
                 continue
-            threshold = strategy.channel_linked_at or strategy.created_at
+            threshold_source = strategy.channel_linked_at or strategy.created_at
+            threshold = self._to_utc(threshold_source) if threshold_source else None
             if threshold and created_at < threshold:
                 continue
             if raw_message is None:
@@ -273,10 +275,19 @@ class StrategyService:
             return None
         text = str(value)
         try:
-            return datetime.fromisoformat(text)
+            result = datetime.fromisoformat(text)
         except ValueError:
             try:
-                return datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
+                result = datetime.strptime(text, "%Y-%m-%d %H:%M:%S")
             except ValueError:
                 logger.debug("Unable to parse timestamp %s", text)
                 return None
+        if result.tzinfo is None:
+            return result.replace(tzinfo=timezone.utc)
+        return result.astimezone(timezone.utc)
+
+    @staticmethod
+    def _to_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)

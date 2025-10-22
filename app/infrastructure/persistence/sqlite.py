@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -409,15 +409,18 @@ class SQLitePersistence(PersistenceGateway):
     # Helpers ----------------------------------------------------------------
     @staticmethod
     def _now() -> str:
-        return datetime.utcnow().replace(microsecond=0).isoformat()
+        return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     @staticmethod
     def _parse_datetime(value: str) -> datetime:
         try:
-            return datetime.fromisoformat(value)
+            result = datetime.fromisoformat(value)
         except ValueError:
             # Fallback for legacy formats without 'T'
-            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+            result = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        if result.tzinfo is None:
+            return result.replace(tzinfo=timezone.utc)
+        return result.astimezone(timezone.utc)
 
     def _row_to_strategy(self, row: sqlite3.Row) -> Strategy:
         return Strategy(
