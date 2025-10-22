@@ -47,21 +47,31 @@ type CaptureState = {
 
 type SectionKey = "home" | "autenticacao" | "configuracao";
 
-const NAV_SECTIONS: Array<{ id: SectionKey; label: string; description: string }> = [
+type NavSection = {
+  id: SectionKey;
+  label: string;
+  description: string;
+  icon: string;
+};
+
+const NAV_SECTIONS: NavSection[] = [
   {
     id: "home",
     label: "Home",
-    description: "Mensagens em tempo real"
+    description: "Mensagens em tempo real",
+    icon: "💬"
   },
   {
     id: "autenticacao",
     label: "Autenticação",
-    description: "Gerencie a sessão do Telegram"
+    description: "Gerencie a sessão do Telegram",
+    icon: "🔐"
   },
   {
     id: "configuracao",
     label: "Configurações",
-    description: "Seleção de canal e captura"
+    description: "Seleção de canal e captura",
+    icon: "⚙️"
   }
 ];
 
@@ -197,6 +207,55 @@ export default function DashboardPage() {
     : isCapturePaused
       ? "Captura pausada"
       : "Captura em andamento";
+
+  const renderSectionButton = (section: NavSection, variant: "top" | "bottom") => {
+    const isActive = section.id === activeSection;
+
+    if (variant === "top") {
+      return (
+        <button
+          key={section.id}
+          type="button"
+          onClick={() => setActiveSection(section.id)}
+          className={`flex flex-1 items-center gap-3 rounded-2xl border px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            isActive
+              ? "border-blue-500/70 bg-blue-600/20 text-blue-100 shadow-lg shadow-blue-900/40"
+              : "border-transparent text-slate-300 hover:border-blue-500/60 hover:text-blue-200"
+          }`}
+          aria-pressed={isActive}
+        >
+          <span className="text-lg" aria-hidden>
+            {section.icon}
+          </span>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold leading-tight">{section.label}</span>
+            <span className="text-xs text-slate-400">{section.description}</span>
+          </div>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        key={`${section.id}-mobile`}
+        type="button"
+        onClick={() => setActiveSection(section.id)}
+        className={`relative flex flex-1 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+          isActive ? "text-blue-200" : "text-slate-300 hover:text-blue-200"
+        }`}
+        aria-pressed={isActive}
+      >
+        <span
+          className={`text-lg ${isActive ? "drop-shadow-[0_0_8px_rgba(59,130,246,0.35)]" : ""}`}
+          aria-hidden
+        >
+          {section.icon}
+        </span>
+        <span>{section.label}</span>
+        {isActive && <span className="absolute inset-x-2 -bottom-1 h-1 rounded-full bg-blue-500/70" />}
+      </button>
+    );
+  };
 
   const postJSON = async (path: string, body?: unknown) => {
     const response = await fetch(`${apiBase}${path}`, {
@@ -524,7 +583,7 @@ export default function DashboardPage() {
     });
 
   return (
-    <div className="min-h-screen pb-12">
+    <div className="min-h-screen pb-28 md:pb-24 lg:pb-16">
       <div className="mx-auto w-full max-w-6xl px-4 pt-12 lg:px-6">
         <header className="flex flex-col gap-3">
           <div className="inline-flex w-max items-center gap-2 rounded-full border border-blue-600/40 bg-blue-600/20 px-4 py-1 text-sm text-blue-200 shadow-lg shadow-blue-900/40">
@@ -534,136 +593,119 @@ export default function DashboardPage() {
             Painel administrativo completo
           </h1>
           <p className="max-w-3xl text-slate-300">
-            Organize as sessões de autenticação, configuração e acompanhamento das mensagens do seu monitoramento em tempo real.
+            Conduza autenticação, configuração e monitoramento das mensagens em um fluxo intuitivo e responsivo.
           </p>
         </header>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-[240px,1fr]">
-          <aside className="card h-max lg:sticky lg:top-6">
-            <header className="flex flex-col gap-1">
-              <h2 className="card-title">Menu</h2>
-              <p className="text-sm text-slate-400">Navegue entre as sessões do painel.</p>
-            </header>
-            <nav className="mt-6 flex flex-col gap-2">
-              {NAV_SECTIONS.map(section => {
-                const isActive = section.id === activeSection;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => setActiveSection(section.id)}
-                    className={`rounded-xl border px-3 py-2 text-left transition ${
-                      isActive
-                        ? "border-blue-500 bg-blue-600/20 text-blue-200 shadow-lg shadow-blue-900/40"
-                        : "border-slate-700 bg-slate-950/40 text-slate-200 hover:border-blue-500 hover:text-blue-200"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">{section.label}</div>
-                    <div className="text-xs text-slate-400">{section.description}</div>
-                  </button>
-                );
-              })}
-            </nav>
-          </aside>
+        <nav className="sticky top-6 z-30 mt-8 hidden gap-3 rounded-3xl border border-slate-800 bg-slate-950/60 p-3 shadow-lg shadow-black/40 backdrop-blur md:flex">
+          {NAV_SECTIONS.map(section => renderSectionButton(section, "top"))}
+        </nav>
 
-          <div className="flex flex-col gap-6">
-            {banner && (
-              <div
-                className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
-                  banner.type === "success"
-                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
-                    : "border-rose-500/40 bg-rose-500/15 text-rose-200"
-                }`}
-              >
-                {banner.message}
-              </div>
-            )}
+        <div className="mt-8 flex flex-col gap-6">
+          {banner && (
+            <div
+              className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+                banner.type === "success"
+                  ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                  : "border-rose-500/40 bg-rose-500/15 text-rose-200"
+              }`}
+            >
+              {banner.message}
+            </div>
+          )}
 
-            {activeSection === "home" && (
-              <section className="card h-full">
-                <header className="flex flex-col gap-2">
+          {activeSection === "home" && (
+            <section className="card">
+              <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
                   <h2 className="card-title">Chat em tempo real</h2>
                   <p className="text-sm text-slate-400">
-                    Visualize as mensagens capturadas do canal monitorado.
+                    Acompanhe as mensagens capturadas do canal monitorado em tempo real.
                   </p>
-                  <div className="inline-flex w-max items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-200">
-                    <span className="text-slate-400">Canal</span>
-                    <span className="text-slate-100">
-                      {currentChannelName ?? "Nenhum canal selecionado"}
-                    </span>
-                  </div>
-                </header>
-
-                <div
-                  ref={scrollerRef}
-                  className="mt-6 flex h-[520px] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
-                >
-                  {messages.length === 0 && (
-                    <div className="mt-12 flex flex-col items-center gap-2 text-center text-sm text-slate-500">
-                      <span className="text-xl">💬</span>
-                      Nenhuma mensagem capturada ainda.
-                    </div>
-                  )}
-
-                  {messages.map(item => {
-                    const channelLabel =
-                      channelNameMap.get(item.channel_id) ?? currentChannelName ?? item.channel_id;
-
-                    return (
-                      <article
-                        key={item.telegram_id}
-                        className="flex flex-col gap-1 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm shadow-inner shadow-black/40"
-                      >
-                        <header className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-slate-200">
-                              {item.sender ?? "Desconhecido"}
-                            </span>
-                            <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                              {channelLabel}
-                            </span>
-                          </div>
-                          <time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>
-                        </header>
-                        <p className="text-slate-100">
-                          {item.message?.trim() || <i className="text-slate-500">[conteúdo sem texto]</i>}
-                        </p>
-                      </article>
-                    );
-                  })}
                 </div>
-              </section>
-            )}
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-4 py-1 text-xs font-semibold text-slate-200">
+                  <span className="text-slate-400">Canal</span>
+                  <span className="text-slate-100">
+                    {currentChannelName ?? "Nenhum canal selecionado"}
+                  </span>
+                </div>
+              </header>
 
-            {activeSection === "autenticacao" && (
-              <section className="card">
-                <header className="flex flex-col gap-2">
-                  <h2 className="card-title">Autenticação Telegram</h2>
-                  <p className="text-sm text-slate-400">
-                    Informe o número do Telegram, valide o código recebido e finalize com a senha de dois fatores se necessário.
-                  </p>
-                </header>
+              <div
+                ref={scrollerRef}
+                className="mt-6 flex h-[520px] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
+              >
+                {messages.length === 0 && (
+                  <div className="mt-12 flex flex-col items-center gap-2 text-center text-sm text-slate-500">
+                    <span className="text-xl" aria-hidden>
+                      💬
+                    </span>
+                    Nenhuma mensagem capturada ainda.
+                  </div>
+                )}
 
-                <div className="mt-4 grid gap-2 text-sm">
-                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${statusColor(authStatus?.connected ?? false)}`}>
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                    Conexão {authStatus?.connected ? "estabelecida" : "offline"}
-                  </div>
-                  <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${statusColor(authStatus?.authorized ?? false)}`}>
-                    <span className="h-2 w-2 rounded-full bg-current" />
-                    {authStatus?.authorized ? "Sessão autorizada" : "Autenticação pendente"}
-                  </div>
-                  {authStatus?.phone_number && (
+                {messages.map(item => {
+                  const channelLabel =
+                    channelNameMap.get(item.channel_id) ?? currentChannelName ?? "Canal desconhecido";
+
+                  return (
+                    <article
+                      key={item.telegram_id}
+                      className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm shadow-inner shadow-black/40"
+                    >
+                      <header className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-slate-200">
+                            {item.sender ?? "Desconhecido"}
+                          </span>
+                          <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                            {channelLabel}
+                          </span>
+                        </div>
+                        <time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>
+                      </header>
+                      <p className="text-slate-100">
+                        {item.message?.trim() || <i className="text-slate-500">[conteúdo sem texto]</i>}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {activeSection === "autenticacao" && (
+            <section className="card">
+              <header className="flex flex-col gap-2">
+                <h2 className="card-title">Autenticação Telegram</h2>
+                <p className="text-sm text-slate-400">
+                  Valide o telefone, confirme o código e finalize com a senha de dois fatores quando necessário.
+                </p>
+              </header>
+
+              <div className="mt-5 grid gap-3 text-sm md:grid-cols-2 md:gap-4">
+                <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${statusColor(authStatus?.connected ?? false)}`}>
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  Conexão {authStatus?.connected ? "estabelecida" : "offline"}
+                </div>
+                <div className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${statusColor(authStatus?.authorized ?? false)}`}>
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                  {authStatus?.authorized ? "Sessão autorizada" : "Autenticação pendente"}
+                </div>
+                {authStatus?.phone_number && (
+                  <div className="md:col-span-2">
                     <p className="text-xs text-slate-400">
                       Conta ativa:{" "}
                       <span className="font-semibold text-slate-200">
                         {authStatus.phone_number}
                       </span>
                     </p>
-                  )}
-                </div>
+                  </div>
+                )}
+              </div>
 
-                <form onSubmit={handleSendCode} className="mt-6 grid gap-3">
+              <div className="mt-6 grid gap-5 md:grid-cols-3">
+                <form onSubmit={handleSendCode} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-4">
                   <label className="text-sm font-medium text-slate-200" htmlFor="phone">
                     Número do Telegram (com DDI)
                   </label>
@@ -680,7 +722,7 @@ export default function DashboardPage() {
                   </SubmitButton>
                 </form>
 
-                <form onSubmit={handleVerifyCode} className="mt-6 grid gap-3">
+                <form onSubmit={handleVerifyCode} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-4">
                   <label className="text-sm font-medium text-slate-200" htmlFor="code">
                     Código recebido (SMS / Telegram)
                   </label>
@@ -697,7 +739,7 @@ export default function DashboardPage() {
                   </SubmitButton>
                 </form>
 
-                <form onSubmit={handlePassword} className="mt-6 grid gap-3">
+                <form onSubmit={handlePassword} className="grid gap-3 rounded-2xl border border-slate-800 bg-slate-950/40 px-4 py-4">
                   <label className="text-sm font-medium text-slate-200" htmlFor="password">
                     Senha 2FA (se habilitada)
                   </label>
@@ -713,153 +755,160 @@ export default function DashboardPage() {
                     Confirmar senha
                   </SubmitButton>
                 </form>
+              </div>
 
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-rose-500 hover:text-rose-200"
-                  disabled={loadingKey === "logout"}
-                >
-                  Encerrar sessão
-                </button>
-              </section>
-            )}
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="mt-6 inline-flex w-full items-center justify-center rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-rose-500 hover:text-rose-200"
+                disabled={loadingKey === "logout"}
+              >
+                Encerrar sessão
+              </button>
+            </section>
+          )}
 
-            {activeSection === "configuracao" && (
-              <section className="card">
-                <header className="flex flex-col gap-2">
-                  <h2 className="card-title">Canal monitorado</h2>
-                  <p className="text-sm text-slate-400">
-                    Selecione o canal autenticado que deseja acompanhar e controle a ingestão das mensagens.
-                  </p>
-                </header>
-                <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
-                  <p className="font-medium text-slate-200">Canal atual</p>
-                  <p className="text-slate-300">
-                    {channelTitle ? (
-                      <span className="font-semibold text-blue-200">{channelTitle}</span>
-                    ) : (
-                      "Nenhum canal configurado."
-                    )}
-                  </p>
-                  {currentChannelId && (
-                    <p className="text-xs text-slate-500">ID: {currentChannelId}</p>
+          {activeSection === "configuracao" && (
+            <section className="card">
+              <header className="flex flex-col gap-2">
+                <h2 className="card-title">Canal monitorado</h2>
+                <p className="text-sm text-slate-400">
+                  Selecione o canal autenticado que deseja acompanhar e controle a ingestão das mensagens.
+                </p>
+              </header>
+              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
+                <p className="font-medium text-slate-200">Canal atual</p>
+                <p className="text-slate-300">
+                  {channelTitle ? (
+                    <span className="font-semibold text-blue-200">{channelTitle}</span>
+                  ) : (
+                    "Nenhum canal configurado."
+                  )}
+                </p>
+                {currentChannelId && (
+                  <p className="text-xs text-slate-500">ID: {currentChannelId}</p>
+                )}
+              </div>
+
+              <form onSubmit={handleChannel} className="mt-6 grid gap-4">
+                <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-slate-200">Canais disponíveis</p>
+                    <button
+                      type="button"
+                      onClick={loadChannelOptions}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-blue-500 hover:text-blue-300"
+                      disabled={loadingKey === "load-channels"}
+                    >
+                      {loadingKey === "load-channels" ? "Carregando..." : "Atualizar lista"}
+                    </button>
+                  </div>
+                  {channelOptions.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Clique em "Atualizar lista" para carregar os canais pertencentes à conta autenticada.
+                    </p>
+                  ) : (
+                    <select
+                      value={channelInput}
+                      onChange={event => setChannelInput(event.target.value)}
+                      className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                      required
+                    >
+                      <option value="" disabled>
+                        Selecione um canal
+                      </option>
+                      {channelOptions.map(option => (
+                        <option key={option.id} value={option.id}>
+                          {option.title}
+                          {option.username ? ` (@${option.username})` : ""}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
 
-                <form onSubmit={handleChannel} className="mt-6 grid gap-4">
-                  <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-slate-200">Canais disponíveis</p>
-                      <button
-                        type="button"
-                        onClick={loadChannelOptions}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-blue-500 hover:text-blue-300"
-                        disabled={loadingKey === "load-channels"}
-                      >
-                        {loadingKey === "load-channels" ? "Carregando..." : "Atualizar lista"}
-                      </button>
-                    </div>
-                    {channelOptions.length === 0 ? (
-                      <p className="text-xs text-slate-500">
-                        Clique em "Atualizar lista" para carregar os canais pertencentes à conta autenticada.
-                      </p>
-                    ) : (
-                      <select
-                        value={channelInput}
-                        onChange={event => setChannelInput(event.target.value)}
-                        className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
-                        required
-                      >
-                        <option value="" disabled>
-                          Selecione um canal
-                        </option>
-                        {channelOptions.map(option => (
-                          <option key={option.id} value={option.id}>
-                            {option.title}
-                            {option.username ? ` (@${option.username})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-
-                  <div className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
-                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-200">
-                      <span
-                        className={`h-2 w-2 rounded-full ${!isCaptureActive ? "bg-rose-400" : isCapturePaused ? "bg-amber-300" : "bg-emerald-400"}`}
-                      />
-                      {captureStatusLabel}
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Controle a ingestão de mensagens sem perder a configuração atual do canal.
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleStartCapture}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={loadingKey === "start" || isCaptureActive}
-                      >
-                        Iniciar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handlePauseCapture}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-amber-500 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={loadingKey === "pause" || !isCaptureActive || isCapturePaused}
-                      >
-                        Pausar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleResumeCapture}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={loadingKey === "resume" || !isCapturePaused || !isCaptureActive}
-                      >
-                        Continuar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleStopCapture}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-rose-500 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={loadingKey === "stop" || !isCaptureActive}
-                      >
-                        Parar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleClearHistory}
-                        className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-500 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={loadingKey === "clear"}
-                      >
-                        Apagar histórico
-                      </button>
-                    </div>
-                  </div>
-
-                  <label className="inline-flex items-center gap-3 text-sm text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={resetHistory}
-                      onChange={event => setResetHistory(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500"
+                <div className="grid gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs font-semibold text-slate-200">
+                    <span
+                      className={`h-2 w-2 rounded-full ${!isCaptureActive ? "bg-rose-400" : isCapturePaused ? "bg-amber-300" : "bg-emerald-400"}`}
                     />
-                    Limpar histórico salvo antes de sincronizar novamente
-                  </label>
+                    {captureStatusLabel}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Gerencie o fluxo de ingestão conforme necessário.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleStartCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "start" || isCaptureActive}
+                    >
+                      Iniciar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePauseCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-amber-500 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "pause" || !isCaptureActive || isCapturePaused}
+                    >
+                      Pausar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResumeCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-500 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "resume" || !isCapturePaused || !isCaptureActive}
+                    >
+                      Continuar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleStopCapture}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-rose-500 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "stop" || !isCaptureActive}
+                    >
+                      Parar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearHistory}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-sky-500 hover:text-sky-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={loadingKey === "clear"}
+                    >
+                      Apagar histórico
+                    </button>
+                  </div>
+                </div>
 
-                  <SubmitButton
-                    loading={loadingKey === "channel"}
-                    disabled={!authStatus?.authorized}
-                  >
-                    Salvar canal e sincronizar
-                  </SubmitButton>
-                </form>
-              </section>
-            )}
-          </div>
+                <label className="inline-flex items-center gap-3 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={resetHistory}
+                    onChange={event => setResetHistory(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-blue-500 focus:ring-blue-500"
+                  />
+                  Limpar histórico salvo antes de sincronizar novamente
+                </label>
+
+                <SubmitButton
+                  loading={loadingKey === "channel"}
+                  disabled={!authStatus?.authorized}
+                >
+                  Salvar canal e sincronizar
+                </SubmitButton>
+              </form>
+            </section>
+          )}
         </div>
       </div>
+
+      <nav className="fixed inset-x-4 bottom-6 z-40 md:hidden">
+        <div className="flex items-center justify-between gap-1 rounded-2xl border border-slate-800 bg-slate-950/85 p-2 shadow-xl shadow-black/40 backdrop-blur">
+          {NAV_SECTIONS.map(section => renderSectionButton(section, "bottom"))}
+        </div>
+      </nav>
     </div>
   );
 }
+
