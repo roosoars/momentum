@@ -1,0 +1,22 @@
+{
+    email {$EMAIL}
+    auto_https on
+}
+
+{$DOMAIN} {
+    encode gzip zstd
+
+    @api path /api* /openapi.json /docs* /redoc*
+    reverse_proxy @api backend:8000
+
+    @websocket path /ws*
+    reverse_proxy @websocket backend:8000
+
+    reverse_proxy frontend:3000
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

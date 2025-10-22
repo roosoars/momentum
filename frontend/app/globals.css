@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(37, 99, 235, 0.25), transparent 45%),
+    #020617;
+}
+
+.card {
+  @apply rounded-2xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl shadow-slate-950/40 backdrop-blur;
+}
+
+.card-title {
+  @apply text-lg font-semibold text-slate-50;
+}

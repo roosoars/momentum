@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: momentum-backend:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TELEGRAM_SESSION_NAME: /app/state/telegram_session
+    volumes:
+      - ./data:/app/data
+      - ./state:/app/state
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: momentum-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: https://${SITE_DOMAIN}
+      NEXT_PUBLIC_API_WS_URL: wss://${SITE_DOMAIN}
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  caddy:
+    image: caddy:2.7-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    environment:
+      DOMAIN: ${SITE_DOMAIN}
+      EMAIL: ${CADDY_ADMIN_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
