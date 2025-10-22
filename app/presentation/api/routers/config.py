@@ -24,3 +24,14 @@ async def update_channel(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {"message": "Canal configurado com sucesso.", "channel": info}
+
+
+@router.get("/channels/available")
+async def list_available_channels(
+    channel_service: ChannelService = Depends(get_channel_service),
+) -> Dict[str, Any]:
+    try:
+        items = await channel_service.list_available_channels()
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return {"items": items, "count": len(items)}

@@ -276,3 +276,35 @@ class TelegramService:
             "phone_number": self._phone_number,
             "password_required": self._password_required,
         }
+
+    async def list_available_channels(self) -> List[Dict[str, Any]]:
+        await self._ensure_connection()
+        if not self._authorized:
+            raise ValueError("Autentique-se antes de listar os canais disponíveis.")
+
+        results: List[Dict[str, Any]] = []
+        async for dialog in self._client.iter_dialogs():
+            entity = dialog.entity
+            if not entity:
+                continue
+
+            if not hasattr(entity, "id"):
+                continue
+
+            peer_id = str(get_peer_id(entity))
+            username = getattr(entity, "username", None)
+            is_channel = getattr(entity, "broadcast", False) or getattr(entity, "megagroup", False)
+            entity_type = entity.__class__.__name__.lower()
+
+            if entity_type in {"channel", "chat"} or is_channel:
+                results.append(
+                    {
+                        "id": peer_id,
+                        "title": dialog.name or getattr(entity, "title", peer_id),
+                        "username": username,
+                        "type": entity_type,
+                    }
+                )
+
+        results.sort(key=lambda item: item["title"].casefold())
+        return results

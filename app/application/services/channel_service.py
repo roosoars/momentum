@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from ...domain.ports.persistence import SettingsRepository
 from ...services.telegram import TelegramService
@@ -25,3 +25,6 @@ class ChannelService:
         self._settings.set_setting("channel_title", info["title"])
         self._settings.set_setting("channel_input", channel_identifier)
         return info
+
+    async def list_available_channels(self) -> List[Dict[str, Any]]:
+        return await self._telegram.list_available_channels()

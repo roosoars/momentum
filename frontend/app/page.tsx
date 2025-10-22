@@ -32,6 +32,13 @@ type Banner = {
   message: string;
 };
 
+type ChannelOption = {
+  id: string;
+  title: string;
+  username?: string | null;
+  type?: string | null;
+};
+
 const resolveApiBaseOnServer = () => {
   const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
   return base.replace(/\/$/, "");
@@ -103,6 +110,7 @@ export default function DashboardPage() {
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [loadingKey, setLoadingKey] = useState<string | null>(null);
+  const [channelOptions, setChannelOptions] = useState<ChannelOption[]>([]);
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -376,6 +384,29 @@ export default function DashboardPage() {
     }
   };
 
+  const loadChannelOptions = async () => {
+    setLoadingKey("load-channels");
+    setBanner(null);
+    try {
+      const response = await fetch(`${apiBase}/api/config/channels/available`);
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(detail || "Falha ao listar canais disponíveis.");
+      }
+      const data = await response.json();
+      setChannelOptions(data.items ?? []);
+      if (!channelInput && Array.isArray(data.items) && data.items.length > 0) {
+        setChannelInput(data.items[0].id);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erro ao buscar canais disponíveis.";
+      setBanner({ type: "error", message });
+    } finally {
+      setLoadingKey(null);
+    }
+  };
+
   return (
     <div className="min-h-screen pb-12">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pt-12 lg:px-6">
@@ -528,6 +559,43 @@ export default function DashboardPage() {
                   className="rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 shadow-inner shadow-black/60 focus:border-blue-500 focus:outline-none"
                   required
                 />
+
+                <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-slate-200">Canais disponíveis</p>
+                    <button
+                      type="button"
+                      onClick={loadChannelOptions}
+                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-medium text-slate-200 transition hover:border-blue-500 hover:text-blue-300"
+                      disabled={loadingKey === "load-channels"}
+                    >
+                      {loadingKey === "load-channels" ? "Carregando..." : "Atualizar lista"}
+                    </button>
+                  </div>
+                  {channelOptions.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      Clique em "Atualizar lista" para carregar os canais pertencentes à conta autenticada.
+                    </p>
+                  ) : (
+                    <>
+                      <select
+                        value={channelInput}
+                        onChange={event => setChannelInput(event.target.value)}
+                        className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
+                      >
+                        {channelOptions.map(option => (
+                          <option key={option.id} value={option.id}>
+                            {option.title}
+                            {option.username ? ` (@${option.username})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500">
+                        A seleção acima preenche o campo automaticamente. Você pode ajustar manualmente se necessário.
+                      </p>
+                    </>
+                  )}
+                </div>
 
                 <label className="inline-flex items-center gap-3 text-sm text-slate-300">
                   <input
