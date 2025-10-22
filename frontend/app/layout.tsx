@@ -4,8 +4,8 @@ import { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Telegram Channel Collector",
-  description: "Painel administrativo para captura em tempo real de canais do Telegram."
+  title: "MOMENTUM",
+  description: "Painel MOMENTUM para captura e monitoramento em tempo real de canais do Telegram."
 };
 
 type RootLayoutProps = {
