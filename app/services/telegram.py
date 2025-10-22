@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from telethon import TelegramClient, events
+from telethon import TelegramClient, events, functions, types
 from telethon.errors import (
     ChannelInvalidError,
     FloodWaitError,
@@ -11,6 +11,9 @@ from telethon.errors import (
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     SessionPasswordNeededError,
+    InviteHashInvalidError,
+    InviteHashExpiredError,
+    UserAlreadyParticipantError,
 )
 from telethon.tl.custom.message import Message
 from telethon.utils import get_peer_id
@@ -151,8 +154,8 @@ class TelegramService:
             logger.info("Configuring channel listener for %s", channel_identifier)
             try:
                 entity = await self._client.get_entity(channel_identifier)
-            except ChannelInvalidError:
-                entity = await self._resolve_entity_from_dialogs(channel_identifier)
+            except (ChannelInvalidError, ValueError):
+                entity = await self._resolve_entity(channel_identifier)
                 if entity is None:
                     raise ValueError("Canal inválido ou inacessível.")
 
@@ -202,6 +205,55 @@ class TelegramService:
 
         logger.warning("Unable to resolve channel %s from dialogs", identifier)
         return None
+
+    async def _resolve_entity(self, identifier: str) -> Optional[object]:
+        identifier = identifier.strip()
+
+        # Attempt to use invite links
+        entity = await self._resolve_entity_from_invite(identifier)
+        if entity is not None:
+            return entity
+
+        # Fallback to dialogs if the invite path did not return the entity
+        return await self._resolve_entity_from_dialogs(identifier)
+
+    async def _resolve_entity_from_invite(self, identifier: str) -> Optional[object]:
+        lowered = identifier.lower()
+        if "t.me/" not in lowered:
+            return None
+
+        slug = identifier.split("t.me/")[-1].strip()
+
+        if slug.startswith("+"):
+            invite_hash = slug.lstrip("+")
+            try:
+                result = await self._client(functions.messages.ImportChatInviteRequest(invite_hash))
+            except (InviteHashInvalidError, InviteHashExpiredError, UserAlreadyParticipantError):
+                logger.warning("Invite hash invalid or already joined for %s", identifier)
+                return None
+            except FloodWaitError as exc:
+                logger.warning("Flood wait while importing invite: %s", exc.seconds)
+                return None
+
+            if isinstance(result, types.messages.ChatInviteAlready):
+                return result.chat
+            if isinstance(result, types.messages.ChatInvite):
+                # If joining succeeds, fetch the entity using the peer id returned
+                if result.chats:
+                    chat = result.chats[0]
+                    try:
+                        return await self._client.get_entity(chat.id)
+                    except Exception:  # pragma: no cover - defensive
+                        return chat
+            return None
+
+        slug = slug.lstrip("@")
+        if not slug:
+            return None
+        try:
+            return await self._client.get_entity(slug)
+        except Exception:
+            return None
 
     # ------------------------------------------------------------------ #
     def add_listener(self, listener: MessageListener) -> None:
