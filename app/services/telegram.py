@@ -151,8 +151,10 @@ class TelegramService:
             logger.info("Configuring channel listener for %s", channel_identifier)
             try:
                 entity = await self._client.get_entity(channel_identifier)
-            except ChannelInvalidError as exc:
-                raise ValueError("Canal inválido ou inacessível.") from exc
+            except ChannelInvalidError:
+                entity = await self._resolve_entity_from_dialogs(channel_identifier)
+                if entity is None:
+                    raise ValueError("Canal inválido ou inacessível.")
 
             canonical_id = str(get_peer_id(entity))
             title = getattr(entity, "title", None) or getattr(entity, "username", None) or canonical_id
@@ -174,6 +176,32 @@ class TelegramService:
 
             logger.info("Listening to channel %s (%s)", title, canonical_id)
             return {"channel_id": canonical_id, "title": title}
+
+    async def _resolve_entity_from_dialogs(self, identifier: str) -> Optional[object]:
+        """Fallback resolution by iterating dialogs when get_entity fails."""
+
+        identifier = identifier.strip()
+        numeric_identifier: Optional[str] = None
+        try:
+            numeric_identifier = str(int(identifier))
+        except ValueError:
+            numeric_identifier = None
+        username_identifier = identifier.lstrip("@").lower()
+
+        async for dialog in self._client.iter_dialogs():
+            entity = dialog.entity
+            if not entity:
+                continue
+            if numeric_identifier is not None:
+                peer_id = str(get_peer_id(entity))
+                if peer_id == numeric_identifier:
+                    return entity
+            username = getattr(entity, "username", None)
+            if username and username_identifier and username_identifier == username.lower():
+                return entity
+
+        logger.warning("Unable to resolve channel %s from dialogs", identifier)
+        return None
 
     # ------------------------------------------------------------------ #
     def add_listener(self, listener: MessageListener) -> None:
