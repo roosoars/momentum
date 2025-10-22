@@ -180,6 +180,7 @@ main() {
     prompt_env_var "CADDY_ADMIN_EMAIL" "E-mail para certificados Let's Encrypt"
 
     mkdir -p "${PROJECT_ROOT}/data" "${PROJECT_ROOT}/state"
+    chown -R 1000:1000 "${PROJECT_ROOT}/data" "${PROJECT_ROOT}/state"
 
     echo "Construindo imagens e iniciando serviços..."
     (cd "${PROJECT_ROOT}" && ${COMPOSE_CMD} up -d --build)
