@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 class AdminAuthService:
     """Manages administrator accounts and token-based authentication."""
 
+    _MAX_BCRYPT_LENGTH = 72
+
     def __init__(
         self,
         persistence: PersistenceGateway,
@@ -40,12 +42,13 @@ class AdminAuthService:
     def ensure_default_admin(self, email: Optional[str], password: Optional[str]) -> Optional[User]:
         if not email or not password:
             return None
-        existing = self._persistence.get_user_by_email(email.lower())
+        normalized_email = email.strip().lower()
+        existing = self._persistence.get_user_by_email(normalized_email)
         if existing:
             return existing
-        hashed = self._pwd.hash(password)
-        logger.info("Creating default administrator account for %s", email)
-        return self._persistence.create_user(email=email.lower(), password_hash=hashed)
+        hashed = self._pwd.hash(self._truncate_password(password))
+        logger.info("Creating default administrator account for %s", normalized_email)
+        return self._persistence.create_user(email=normalized_email, password_hash=hashed)
 
     def register(self, email: str, password: str) -> User:
         email_clean = email.strip().lower()
@@ -55,7 +58,7 @@ class AdminAuthService:
             raise ValueError("Senha deve ter ao menos 6 caracteres.")
         if self._persistence.get_user_by_email(email_clean):
             raise ValueError("Já existe um administrador com este e-mail.")
-        hashed = self._pwd.hash(password)
+        hashed = self._pwd.hash(self._truncate_password(password))
         return self._persistence.create_user(email=email_clean, password_hash=hashed)
 
     def authenticate(self, email: str, password: str) -> str:
@@ -63,7 +66,7 @@ class AdminAuthService:
         user = self._persistence.get_user_by_email(email_clean)
         if not user or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas.")
-        if not self._pwd.verify(password, user.password_hash):
+        if not self._pwd.verify(self._truncate_password(password), user.password_hash):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais inválidas.")
         return self._create_token(user)
 
@@ -77,7 +80,7 @@ class AdminAuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido.")
         try:
             user_id_int = int(user_id)
-        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        except (TypeError, ValueError) as exc:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token inválido.") from exc
         user = self._persistence.get_user_by_id(user_id_int)
         if not user:
@@ -95,3 +98,10 @@ class AdminAuthService:
         expire = now + timedelta(minutes=self._token_exp_minutes)
         payload = {"sub": str(user.id), "email": user.email, "exp": expire}
         return jwt.encode(payload, self._secret_key, algorithm=self._algorithm)
+
+    def _truncate_password(self, password: str) -> str:
+        """Bcrypt only processes the first 72 bytes; avoid runtime errors."""
+        if len(password) <= self._MAX_BCRYPT_LENGTH:
+            return password
+        logger.warning("Truncating admin password to 72 characters for bcrypt compatibility.")
+        return password[: self._MAX_BCRYPT_LENGTH]
