@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from ....application.services.strategy_service import StrategyService
 from ....domain.models import Strategy, StrategySignal, User
@@ -131,7 +131,11 @@ async def resume_strategy(
     return _serialize_strategy(strategy)
 
 
-@router.delete("/{strategy_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{strategy_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
 async def delete_strategy(
     strategy_id: int,
     _: User = Depends(require_admin_user),
