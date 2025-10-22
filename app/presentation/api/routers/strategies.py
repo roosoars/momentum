@@ -140,11 +140,12 @@ async def delete_strategy(
     strategy_id: int,
     _: User = Depends(require_admin_user),
     service: StrategyService = Depends(get_strategy_service),
-) -> None:
+) -> Response:
     try:
         await service.delete_strategy(strategy_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{strategy_id}/signals")
