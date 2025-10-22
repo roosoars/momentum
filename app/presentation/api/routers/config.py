@@ -19,13 +19,14 @@ async def update_channel(
     payload: ChannelConfig,
     channel_service: ChannelService = Depends(get_channel_service),
 ) -> Dict[str, Any]:
+    channels_requested = payload.channels
     try:
-        info = await channel_service.configure_channel(payload.channel_id, reset_history=payload.reset_history)
+        info = await channel_service.configure_channels(channels_requested, reset_history=payload.reset_history)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return {
-        "message": "Canal configurado com sucesso.",
-        "channel": info,
+        "message": "Canais configurados com sucesso.",
+        "channels": info,
         "capture_state": channel_service.capture_state(),
     }
 

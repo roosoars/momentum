@@ -39,8 +39,9 @@ class TelegramService:
         self._client = TelegramClient(session_name, api_id, api_hash)
         self._messages = message_repository
         self._history_limit = history_limit
-        self._channel_id: Optional[str] = None
-        self._channel_title: Optional[str] = None
+        self._channel_ids: List[str] = []
+        self._channel_titles: Dict[str, str] = {}
+        self._channel_entities: Dict[str, object] = {}
         self._handler = None
         self._lock = asyncio.Lock()
 
@@ -142,40 +143,66 @@ class TelegramService:
         if self._handler:
             self._client.remove_event_handler(self._handler)
             self._handler = None
-        self._channel_id = None
-        self._channel_title = None
+        self._channel_ids = []
+        self._channel_titles = {}
+        self._channel_entities = {}
         logger.info("Telegram session logged out.")
 
     # ------------------------------------------------------------------ #
-    async def set_channel(self, channel_identifier: str, reset_history: bool = True) -> Dict[str, Any]:
+    async def set_channels(self, channel_identifiers: List[str], reset_history: bool = True) -> List[Dict[str, Any]]:
         await self._ensure_connection()
         if not self._authorized:
             raise ValueError("Autentique-se no Telegram antes de configurar o canal.")
 
+        identifiers = [item.strip() for item in channel_identifiers if item and item.strip()]
+        if not identifiers:
+            raise ValueError("Informe ao menos um canal.")
+        unique: List[str] = []
+        for item in identifiers:
+            if item not in unique:
+                unique.append(item)
+        if len(unique) > 5:
+            raise ValueError("É possível monitorar no máximo 5 canais simultaneamente.")
+
         async with self._lock:
-            logger.info("Configuring channel listener for %s", channel_identifier)
-            try:
-                entity = await self._client.get_entity(channel_identifier)
-            except (ChannelInvalidError, ValueError):
-                entity = await self._resolve_entity(channel_identifier)
-                if entity is None:
-                    raise ValueError("Canal inválido ou inacessível.")
+            logger.info("Configuring channel listener for %s", ", ".join(unique))
+            entities: Dict[str, object] = {}
+            channel_infos: List[Dict[str, Any]] = []
 
-            canonical_id = str(get_peer_id(entity))
-            title = getattr(entity, "title", None) or getattr(entity, "username", None) or canonical_id
+            for channel_identifier in unique:
+                try:
+                    entity = await self._client.get_entity(channel_identifier)
+                except (ChannelInvalidError, ValueError):
+                    entity = await self._resolve_entity(channel_identifier)
+                    if entity is None:
+                        raise ValueError(f"Canal inválido ou inacessível: {channel_identifier}")
 
-            if reset_history:
-                self._messages.clear_messages_for_channel(canonical_id)
+                canonical_id = str(get_peer_id(entity))
+                title = getattr(entity, "title", None) or getattr(entity, "username", None) or canonical_id
 
-            await self._ingest_history(entity, canonical_id)
+                if reset_history:
+                    self._messages.clear_messages_for_channel(canonical_id)
 
-            await self._attach_handler(entity)
+                await self._ingest_history(entity, canonical_id)
 
-            self._channel_id = canonical_id
-            self._channel_title = title
+                entities[canonical_id] = entity
+                channel_infos.append({"channel_id": canonical_id, "title": title})
 
-            logger.info("Listening to channel %s (%s)", title, canonical_id)
-            return {"channel_id": canonical_id, "title": title}
+            await self._attach_handler(list(entities.values()))
+
+            self._channel_ids = [info["channel_id"] for info in channel_infos]
+            self._channel_titles = {info["channel_id"]: info["title"] for info in channel_infos}
+            self._channel_entities = entities
+
+            logger.info(
+                "Listening to channels: %s",
+                ", ".join(f"{self._channel_titles[cid]} ({cid})" for cid in self._channel_ids),
+            )
+            return channel_infos
+
+    async def set_channel(self, channel_identifier: str, reset_history: bool = True) -> Dict[str, Any]:
+        result = await self.set_channels([channel_identifier], reset_history=reset_history)
+        return result[0]
 
     async def _resolve_entity_from_dialogs(self, identifier: str) -> Optional[object]:
         """Fallback resolution by iterating dialogs when get_entity fails."""
@@ -252,12 +279,12 @@ class TelegramService:
         except Exception:
             return None
 
-    async def _attach_handler(self, entity: object) -> None:
+    async def _attach_handler(self, entities: List[object]) -> None:
         if self._handler:
             self._client.remove_event_handler(self._handler)
 
         self._handler = self._client.add_event_handler(
-            self._on_new_message, events.NewMessage(chats=entity)
+            self._on_new_message, events.NewMessage(chats=entities)
         )
         self._capture_active = True
         self._capture_paused = False
@@ -292,7 +319,7 @@ class TelegramService:
         if not self._capture_active or self._capture_paused:
             return
         message: Message = event.message
-        channel_id = str(event.chat_id or self._channel_id or "")
+        channel_id = str(event.chat_id or "")
         await self._persist_message(message, channel_id, broadcast=True)
 
     async def _persist_message(self, message: Message, channel_id: str, broadcast: bool) -> Dict[str, Any]:
@@ -331,8 +358,14 @@ class TelegramService:
         return {
             "connected": self._client.is_connected(),
             "authorized": self._authorized,
-            "channel_id": self._channel_id,
-            "channel_title": self._channel_title,
+            "channel_ids": self._channel_ids,
+            "channel_titles": [self._channel_titles.get(cid) for cid in self._channel_ids],
+            "channels": [
+                {"id": cid, "title": self._channel_titles.get(cid)}
+                for cid in self._channel_ids
+            ],
+            "channel_id": self._channel_ids[0] if self._channel_ids else None,
+            "channel_title": self._channel_titles.get(self._channel_ids[0]) if self._channel_ids else None,
             "pending_phone": self._pending_phone,
             "phone_number": self._phone_number,
             "password_required": self._password_required,
@@ -349,14 +382,14 @@ class TelegramService:
         if not self._capture_active:
             raise ValueError("Captura não está ativa.")
         self._capture_paused = True
-        logger.info("Capture paused for channel %s", self._channel_id)
+        logger.info("Capture paused for channels: %s", ", ".join(self._channel_ids))
         return self.get_capture_state()
 
     def resume_capture(self) -> Dict[str, bool]:
         if not self._capture_active:
             raise ValueError("Captura não está ativa.")
         self._capture_paused = False
-        logger.info("Capture resumed for channel %s", self._channel_id)
+        logger.info("Capture resumed for channels: %s", ", ".join(self._channel_ids))
         return self.get_capture_state()
 
     async def stop_capture(self) -> Dict[str, bool]:
@@ -365,26 +398,34 @@ class TelegramService:
             self._handler = None
         self._capture_active = False
         self._capture_paused = False
-        logger.info("Capture stopped for channel %s", self._channel_id)
+        logger.info("Capture stopped for channels: %s", ", ".join(self._channel_ids))
         return self.get_capture_state()
 
     async def start_capture(self) -> Dict[str, bool]:
         if self._capture_active:
             return self.get_capture_state()
-        if not self._channel_id:
+        if not self._channel_ids:
             raise ValueError("Nenhum canal configurado para iniciar captura.")
-        entity = await self._resolve_entity(self._channel_id)
-        if entity is None:
-            raise ValueError("Não foi possível retomar a captura para o canal configurado.")
-        await self._attach_handler(entity)
-        logger.info("Capture started for channel %s", self._channel_id)
+        entities = list(self._channel_entities.values())
+        if not entities:
+            # attempt to resolve again
+            entities = []
+            for channel_id in self._channel_ids:
+                entity = await self._resolve_entity(channel_id)
+                if entity is None:
+                    raise ValueError(f"Não foi possível retomar a captura para o canal {channel_id}.")
+                entities.append(entity)
+                self._channel_entities[channel_id] = entity
+        await self._attach_handler(entities)
+        logger.info("Capture started for channels: %s", ", ".join(self._channel_ids))
         return self.get_capture_state()
 
     async def clear_history(self) -> None:
-        if not self._channel_id:
+        if not self._channel_ids:
             raise ValueError("Nenhum canal configurado para limpar histórico.")
-        self._messages.clear_messages_for_channel(self._channel_id)
-        logger.info("Cleared history for channel %s", self._channel_id)
+        for channel_id in self._channel_ids:
+            self._messages.clear_messages_for_channel(channel_id)
+        logger.info("Cleared history for channels: %s", ", ".join(self._channel_ids))
 
     async def list_available_channels(self) -> List[Dict[str, Any]]:
         await self._ensure_connection()

@@ -2,11 +2,19 @@
 
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
+type MonitoredChannel = {
+  id: string;
+  title: string | null;
+};
+
 type AuthStatus = {
   connected: boolean;
   authorized: boolean;
   channel_id: string | null;
   channel_title: string | null;
+  channel_ids?: string[] | null;
+  channel_titles?: (string | null)[] | null;
+  channels?: MonitoredChannel[] | null;
   pending_phone: string | null;
   phone_number: string | null;
   password_required: boolean;
@@ -15,7 +23,11 @@ type AuthStatus = {
 type ConfigResponse = {
   channel_id: string | null;
   channel_title: string | null;
+  channel_ids?: string[] | null;
+  channel_titles?: (string | null)[] | null;
+  channels?: MonitoredChannel[] | null;
   last_input: string | null;
+  last_inputs?: string[] | null;
   status: AuthStatus;
   capture_state?: CaptureState;
 };
@@ -44,6 +56,8 @@ type CaptureState = {
   active: boolean;
   paused: boolean;
 };
+
+const MAX_CHANNELS = 5;
 
 type SectionKey = "home" | "autenticacao" | "configuracao";
 
@@ -141,7 +155,6 @@ export default function DashboardPage() {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
-  const [channelInput, setChannelInput] = useState("");
   const [resetHistory, setResetHistory] = useState(true);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [banner, setBanner] = useState<Banner | null>(null);
@@ -149,19 +162,80 @@ export default function DashboardPage() {
   const [channelOptions, setChannelOptions] = useState<ChannelOption[]>([]);
   const [captureState, setCaptureState] = useState<CaptureState | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKey>("home");
+  const [pendingChannelIds, setPendingChannelIds] = useState<string[]>([]);
+  const [selectedOverviewChannels, setSelectedOverviewChannels] = useState<string[]>([]);
+  const [activeChannelTab, setActiveChannelTab] = useState<string>("overview");
 
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastConfiguredChannelsRef = useRef<string>("");
 
-  const channelTitle = useMemo(
-    () => config?.channel_title ?? authStatus?.channel_title ?? null,
-    [config?.channel_title, authStatus?.channel_title]
-  );
+  const configuredChannelIds = useMemo(() => {
+    const configIds = config?.channel_ids ?? [];
+    if (configIds && configIds.length > 0) {
+      return configIds.filter(Boolean) as string[];
+    }
+    if (config?.channel_id) {
+      return [config.channel_id];
+    }
+    const statusIds = authStatus?.channel_ids ?? [];
+    if (statusIds && statusIds.length > 0) {
+      return statusIds.filter(Boolean) as string[];
+    }
+    if (authStatus?.channel_id) {
+      return [authStatus.channel_id];
+    }
+    return [];
+  }, [authStatus?.channel_id, authStatus?.channel_ids, config?.channel_id, config?.channel_ids]);
 
-  const currentChannelId = useMemo(
-    () => config?.channel_id ?? authStatus?.channel_id ?? null,
-    [config?.channel_id, authStatus?.channel_id]
-  );
+  const monitoredChannels = useMemo(() => {
+    const entries = new Map<string, string | null>();
+
+    const append = (items?: MonitoredChannel[] | null) => {
+      if (!items) {
+        return;
+      }
+      items.forEach(item => {
+        if (item && item.id) {
+          entries.set(item.id, item.title ?? item.id);
+        }
+      });
+    };
+
+    append(config?.channels ?? null);
+    append(authStatus?.channels ?? null);
+
+    if (config?.channel_ids && config?.channel_titles) {
+      config.channel_ids.forEach((id, index) => {
+        if (id) {
+          const title = config.channel_titles?.[index] ?? entries.get(id) ?? id;
+          entries.set(id, title);
+        }
+      });
+    }
+    if (authStatus?.channel_ids && authStatus?.channel_titles) {
+      authStatus.channel_ids.forEach((id, index) => {
+        if (id) {
+          const title = authStatus.channel_titles?.[index] ?? entries.get(id) ?? id;
+          entries.set(id, title);
+        }
+      });
+    }
+
+    if (config?.channel_id) {
+      entries.set(config.channel_id, config.channel_title ?? config.channel_id);
+    }
+    if (authStatus?.channel_id) {
+      entries.set(authStatus.channel_id, authStatus.channel_title ?? authStatus.channel_id);
+    }
+
+    const orderSource =
+      configuredChannelIds.length > 0 ? configuredChannelIds : Array.from(entries.keys());
+
+    return orderSource
+      .filter(id => !!id && entries.has(id))
+      .map(id => ({ id, title: entries.get(id) ?? id }));
+  }, [authStatus?.channel_id, authStatus?.channel_title, authStatus?.channels, config?.channel_id, config?.channel_title, config?.channels, configuredChannelIds]);
 
   const channelNameMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -170,35 +244,63 @@ export default function DashboardPage() {
         map.set(option.id, option.title);
       }
     });
-    if (config?.channel_id && config.channel_title) {
-      map.set(config.channel_id, config.channel_title);
-    }
-    if (authStatus?.channel_id && authStatus.channel_title) {
-      map.set(authStatus.channel_id, authStatus.channel_title);
-    }
-    if (channelInput && channelTitle) {
-      map.set(channelInput, channelTitle);
-    }
+    monitoredChannels.forEach(channel => {
+      map.set(channel.id, channel.title ?? channel.id);
+    });
+    pendingChannelIds.forEach(id => {
+      if (id && !map.has(id)) {
+        map.set(id, id);
+      }
+    });
     return map;
-  }, [
-    authStatus?.channel_id,
-    authStatus?.channel_title,
-    channelInput,
-    channelOptions,
-    channelTitle,
-    config?.channel_id,
-    config?.channel_title
-  ]);
+  }, [channelOptions, monitoredChannels, pendingChannelIds]);
 
-  const currentChannelName = useMemo(() => {
-    if (currentChannelId) {
-      return channelNameMap.get(currentChannelId) ?? channelTitle ?? null;
+  const pendingChannelLimitReached = pendingChannelIds.length >= MAX_CHANNELS;
+  const monitoredChannelIds = useMemo(
+    () => monitoredChannels.map(channel => channel.id),
+    [monitoredChannels]
+  );
+  const pendingChannelsNotListed = useMemo(
+    () =>
+      pendingChannelIds.filter(
+        id => !channelOptions.some(option => option.id === id)
+      ),
+    [channelOptions, pendingChannelIds]
+  );
+
+  const overviewSelectedIds = useMemo(
+    () => selectedOverviewChannels.filter(id => monitoredChannelIds.includes(id)),
+    [monitoredChannelIds, selectedOverviewChannels]
+  );
+
+  const filteredMessages = useMemo(() => {
+    if (activeChannelTab === "overview") {
+      const allowed = new Set(overviewSelectedIds);
+      return messages.filter(item => allowed.has(item.channel_id));
     }
-    if (channelInput) {
-      return channelNameMap.get(channelInput) ?? channelTitle ?? null;
+    return messages.filter(item => item.channel_id === activeChannelTab);
+  }, [activeChannelTab, messages, overviewSelectedIds]);
+
+  const activeChannelDescription = useMemo(() => {
+    if (monitoredChannelIds.length === 0) {
+      return "Nenhum canal monitorado. Configure na aba de Configurações.";
     }
-    return channelTitle;
-  }, [channelInput, channelNameMap, channelTitle, currentChannelId]);
+    if (activeChannelTab === "overview") {
+      if (overviewSelectedIds.length === 0) {
+        if (monitoredChannelIds.length === 0) {
+          return "Nenhum canal monitorado. Configure na aba de Configurações.";
+        }
+        return "Nenhum canal selecionado na visão geral.";
+      }
+      if (overviewSelectedIds.length === monitoredChannelIds.length) {
+        return "Exibindo mensagens de todos os canais monitorados.";
+      }
+      const names = overviewSelectedIds.map(id => channelNameMap.get(id) ?? id).join(", ");
+      return `Exibindo mensagens de: ${names}.`;
+    }
+    const name = channelNameMap.get(activeChannelTab) ?? activeChannelTab;
+    return `Exibindo mensagens de ${name}.`;
+  }, [activeChannelTab, channelNameMap, monitoredChannelIds.length, overviewSelectedIds]);
 
   const isCaptureActive = captureState?.active ?? false;
   const isCapturePaused = captureState?.paused ?? false;
@@ -320,9 +422,6 @@ export default function DashboardPage() {
       }
       const data: ConfigResponse = await response.json();
       setConfig(data);
-      if (!channelInput) {
-        setChannelInput(data.last_input ?? "");
-      }
       if (data.capture_state) {
         setCaptureState(data.capture_state);
       }
@@ -341,6 +440,26 @@ export default function DashboardPage() {
     void refreshStatus(true);
     void refreshConfig(true);
   }, [apiBase]);
+
+  useEffect(() => {
+    const signature = JSON.stringify(configuredChannelIds);
+    if (signature !== lastConfiguredChannelsRef.current) {
+      const clean = Array.from(new Set(configuredChannelIds.filter(Boolean)));
+      lastConfiguredChannelsRef.current = signature;
+      setPendingChannelIds(clean);
+      setSelectedOverviewChannels(clean);
+      if (activeChannelTab !== "overview" && !clean.includes(activeChannelTab)) {
+        setActiveChannelTab("overview");
+      }
+    } else {
+      // Ensure overview filters never contain channels that no longer exist
+      const validSet = new Set(configuredChannelIds.filter(Boolean));
+      setSelectedOverviewChannels(prev => prev.filter(id => validSet.has(id)));
+      if (activeChannelTab !== "overview" && !configuredChannelIds.includes(activeChannelTab)) {
+        setActiveChannelTab("overview");
+      }
+    }
+  }, [activeChannelTab, configuredChannelIds]);
 
   useEffect(() => {
     const socket = new WebSocket(`${wsBase}/ws/messages`);
@@ -500,14 +619,23 @@ export default function DashboardPage() {
     setLoadingKey("channel");
     setBanner(null);
     try {
+      const sanitized = pendingChannelIds
+        .map(item => item.trim())
+        .filter((item, index, array) => item.length > 0 && array.indexOf(item) === index)
+        .slice(0, MAX_CHANNELS);
+
+      if (sanitized.length === 0) {
+        throw new Error("Selecione ao menos um canal para monitorar.");
+      }
+
       const result = await postJSON("/api/config/channel", {
-        channel_id: channelInput.trim(),
+        channels: sanitized,
         reset_history: resetHistory
       });
       updateCaptureState(result?.capture_state ?? null);
       setBanner({
         type: "success",
-        message: "Canal atualizado com sucesso."
+        message: "Canais atualizados com sucesso."
       });
       await refreshConfig(true);
       await refreshStatus(true);
@@ -530,10 +658,15 @@ export default function DashboardPage() {
         throw new Error(detail || "Falha ao listar canais disponíveis.");
       }
       const data = await response.json();
-      setChannelOptions(data.items ?? []);
-      if (!channelInput && Array.isArray(data.items) && data.items.length > 0) {
-        setChannelInput(data.items[0].id);
-      }
+      const items: ChannelOption[] = Array.isArray(data.items) ? data.items : [];
+      setChannelOptions(items);
+      setPendingChannelIds(prev => {
+        if (prev.length === 0) {
+          return prev;
+        }
+        const valid = prev.filter(id => items.some(option => option.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Erro ao buscar canais disponíveis.";
@@ -582,6 +715,27 @@ export default function DashboardPage() {
       setMessages([]);
     });
 
+  const togglePendingChannel = (channelId: string) => {
+    setPendingChannelIds(prev => {
+      if (prev.includes(channelId)) {
+        return prev.filter(id => id !== channelId);
+      }
+      if (prev.length >= MAX_CHANNELS) {
+        return prev;
+      }
+      return [...prev, channelId];
+    });
+  };
+
+  const toggleOverviewChannel = (channelId: string) => {
+    setSelectedOverviewChannels(prev => {
+      if (prev.includes(channelId)) {
+        return prev.filter(id => id !== channelId);
+      }
+      return [...prev, channelId];
+    });
+  };
+
   return (
     <div className="min-h-screen pb-28 md:pb-24 lg:pb-16">
       <div className="mx-auto w-full max-w-6xl px-4 pt-12 lg:px-6">
@@ -616,60 +770,142 @@ export default function DashboardPage() {
 
           {activeSection === "home" && (
             <section className="card">
-              <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <header className="flex flex-col gap-3">
                 <div className="space-y-1">
                   <h2 className="card-title">Chat em tempo real</h2>
                   <p className="text-sm text-slate-400">
-                    Acompanhe as mensagens capturadas do canal monitorado em tempo real.
+                    Acompanhe as mensagens capturadas dos canais monitorados em tempo real.
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 px-4 py-1 text-xs font-semibold text-slate-200">
-                  <span className="text-slate-400">Canal</span>
-                  <span className="text-slate-100">
-                    {currentChannelName ?? "Nenhum canal selecionado"}
-                  </span>
-                </div>
+                <p className="text-xs text-slate-500">{activeChannelDescription}</p>
               </header>
 
-              <div
-                ref={scrollerRef}
-                className="mt-6 flex h-[520px] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
-              >
-                {messages.length === 0 && (
-                  <div className="mt-12 flex flex-col items-center gap-2 text-center text-sm text-slate-500">
-                    <span className="text-xl" aria-hidden>
-                      💬
+              <div className="mt-4 flex flex-col gap-4">
+                <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-800 bg-slate-950/50 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveChannelTab("overview")}
+                    className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                      activeChannelTab === "overview"
+                        ? "bg-blue-600/30 text-blue-50 shadow-lg shadow-blue-900/40"
+                        : "text-slate-300 hover:text-blue-200"
+                    }`}
+                  >
+                    Visão geral
+                  </button>
+                  {monitoredChannels.length === 0 ? (
+                    <span className="px-3 py-1 text-xs text-slate-500">
+                      Nenhum canal configurado.
                     </span>
-                    Nenhuma mensagem capturada ainda.
+                  ) : (
+                    monitoredChannels.map(channel => {
+                      const isActive = activeChannelTab === channel.id;
+                      return (
+                        <button
+                          key={channel.id}
+                          type="button"
+                          onClick={() => setActiveChannelTab(channel.id)}
+                          className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                            isActive
+                              ? "bg-blue-600/30 text-blue-50 shadow-lg shadow-blue-900/40"
+                              : "text-slate-300 hover:text-blue-200"
+                          }`}
+                        >
+                          {channel.title ?? channel.id}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                {activeChannelTab === "overview" && monitoredChannels.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-800 bg-slate-950/40 px-3 py-2 text-xs text-slate-300">
+                    <span className="font-semibold text-slate-200">Filtrar canais:</span>
+                    {monitoredChannels.map(channel => {
+                      const isActive = selectedOverviewChannels.includes(channel.id);
+                      return (
+                        <button
+                          key={`overview-${channel.id}`}
+                          type="button"
+                          onClick={() => toggleOverviewChannel(channel.id)}
+                          className={`rounded-lg border px-3 py-1 font-semibold transition ${
+                            isActive
+                              ? "border-blue-500/60 bg-blue-600/25 text-blue-100"
+                              : "border-slate-700 text-slate-300 hover:border-blue-500 hover:text-blue-200"
+                          }`}
+                        >
+                          {channel.title ?? channel.id}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedOverviewChannels(Array.from(new Set(monitoredChannelIds)))
+                      }
+                      className="rounded-lg border border-slate-700 px-3 py-1 font-semibold text-slate-300 transition hover:border-blue-500 hover:text-blue-200"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedOverviewChannels([])}
+                      className="rounded-lg border border-slate-700 px-3 py-1 font-semibold text-slate-300 transition hover:border-rose-500 hover:text-rose-200"
+                    >
+                      Limpar
+                    </button>
                   </div>
                 )}
 
-                {messages.map(item => {
-                  const channelLabel =
-                    channelNameMap.get(item.channel_id) ?? currentChannelName ?? "Canal desconhecido";
+                <div
+                  ref={scrollerRef}
+                  className="flex h-[520px] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/50 p-4"
+                >
+                  {monitoredChannels.length === 0 ? (
+                    <div className="mt-12 flex flex-col items-center gap-2 text-center text-sm text-slate-500">
+                      <span className="text-xl" aria-hidden>
+                        📡
+                      </span>
+                      Nenhum canal monitorado. Configure até 5 canais na aba de Configurações.
+                    </div>
+                  ) : filteredMessages.length === 0 ? (
+                    <div className="mt-12 flex flex-col items-center gap-2 text-center text-sm text-slate-500">
+                      <span className="text-xl" aria-hidden>
+                        💬
+                      </span>
+                      Nenhuma mensagem capturada para o filtro atual.
+                    </div>
+                  ) : (
+                    filteredMessages.map(item => {
+                      const channelLabel =
+                        channelNameMap.get(item.channel_id) ?? item.channel_id ?? "Canal";
 
-                  return (
-                    <article
-                      key={item.telegram_id}
-                      className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm shadow-inner shadow-black/40"
-                    >
-                      <header className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-slate-200">
-                            {item.sender ?? "Desconhecido"}
-                          </span>
-                          <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
-                            {channelLabel}
-                          </span>
-                        </div>
-                        <time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>
-                      </header>
-                      <p className="text-slate-100">
-                        {item.message?.trim() || <i className="text-slate-500">[conteúdo sem texto]</i>}
-                      </p>
-                    </article>
-                  );
-                })}
+                      return (
+                        <article
+                          key={`${item.channel_id}-${item.telegram_id}`}
+                          className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm shadow-inner shadow-black/40"
+                        >
+                          <header className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-slate-200">
+                                {item.sender ?? "Desconhecido"}
+                              </span>
+                              <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">
+                                {channelLabel}
+                              </span>
+                            </div>
+                            <time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>
+                          </header>
+                          <p className="text-slate-100">
+                            {item.message?.trim() || (
+                              <i className="text-slate-500">[conteúdo sem texto]</i>
+                            )}
+                          </p>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </section>
           )}
@@ -773,25 +1009,32 @@ export default function DashboardPage() {
               <header className="flex flex-col gap-2">
                 <h2 className="card-title">Canal monitorado</h2>
                 <p className="text-sm text-slate-400">
-                  Selecione o canal autenticado que deseja acompanhar e controle a ingestão das mensagens.
+                  Selecione até 5 canais autenticados para acompanhar e controle a ingestão das mensagens.
                 </p>
               </header>
               <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
-                <p className="font-medium text-slate-200">Canal atual</p>
-                <p className="text-slate-300">
-                  {channelTitle ? (
-                    <span className="font-semibold text-blue-200">{channelTitle}</span>
-                  ) : (
-                    "Nenhum canal configurado."
-                  )}
-                </p>
-                {currentChannelId && (
-                  <p className="text-xs text-slate-500">ID: {currentChannelId}</p>
+                <p className="font-medium text-slate-200">Canais monitorados</p>
+                {monitoredChannels.length === 0 ? (
+                  <p className="text-slate-400">Nenhum canal configurado.</p>
+                ) : (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {monitoredChannels.map(channel => (
+                      <span
+                        key={`monitored-${channel.id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-blue-500/40 bg-blue-600/20 px-3 py-1 text-xs font-semibold text-blue-100"
+                      >
+                        {channel.title ?? channel.id}
+                      </span>
+                    ))}
+                  </div>
                 )}
+                <p className="mt-2 text-xs text-slate-500">
+                  Máximo de {MAX_CHANNELS} canais simultâneos.
+                </p>
               </div>
 
               <form onSubmit={handleChannel} className="mt-6 grid gap-4">
-                <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
+                <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-3 text-sm">
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-slate-200">Canais disponíveis</p>
                     <button
@@ -803,27 +1046,63 @@ export default function DashboardPage() {
                       {loadingKey === "load-channels" ? "Carregando..." : "Atualizar lista"}
                     </button>
                   </div>
+                  <p className="text-xs text-slate-500">
+                    Selecione até {MAX_CHANNELS} canais. {pendingChannelIds.length}/{MAX_CHANNELS} selecionados.
+                  </p>
                   {channelOptions.length === 0 ? (
                     <p className="text-xs text-slate-500">
                       Clique em "Atualizar lista" para carregar os canais pertencentes à conta autenticada.
                     </p>
                   ) : (
-                    <select
-                      value={channelInput}
-                      onChange={event => setChannelInput(event.target.value)}
-                      className="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none"
-                      required
-                    >
-                      <option value="" disabled>
-                        Selecione um canal
-                      </option>
-                      {channelOptions.map(option => (
-                        <option key={option.id} value={option.id}>
-                          {option.title}
-                          {option.username ? ` (@${option.username})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                      {channelOptions.map(option => {
+                        const checked = pendingChannelIds.includes(option.id);
+                        const disabled = !checked && pendingChannelLimitReached;
+                        return (
+                          <label
+                            key={option.id}
+                            className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2 transition ${
+                              checked
+                                ? "border-blue-500/60 bg-blue-600/20 text-blue-100"
+                                : "border-slate-700 bg-slate-950/60 text-slate-200 hover:border-blue-500 hover:text-blue-200"
+                            } ${disabled ? "opacity-60" : ""}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => togglePendingChannel(option.id)}
+                              className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-950 text-blue-500 focus:ring-blue-500"
+                              disabled={disabled}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-sm font-semibold">{option.title}</span>
+                              <span className="text-xs text-slate-400">
+                                {option.username ? `@${option.username}` : option.id}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {pendingChannelsNotListed.length > 0 && (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                      <p>
+                        Os canais abaixo estão selecionados, mas não apareceram na lista carregada. Clique para remover da seleção:
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {pendingChannelsNotListed.map(id => (
+                          <button
+                            key={`missing-${id}`}
+                            type="button"
+                            onClick={() => togglePendingChannel(id)}
+                            className="rounded border border-amber-400 px-2 py-1 font-semibold text-amber-100 transition hover:border-amber-300 hover:text-amber-50"
+                          >
+                            {channelNameMap.get(id) ?? id} ×
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -893,7 +1172,7 @@ export default function DashboardPage() {
 
                 <SubmitButton
                   loading={loadingKey === "channel"}
-                  disabled={!authStatus?.authorized}
+                  disabled={!authStatus?.authorized || pendingChannelIds.length === 0}
                 >
                   Salvar canal e sincronizar
                 </SubmitButton>
@@ -911,4 +1190,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
