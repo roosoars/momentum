@@ -1,31 +1,52 @@
-<<<<<<< HEAD
-# momentum
-=======
-# Telegram Channel Collector
+# Momentum – Trading Signal Orchestrator
 
-API FastAPI e painel Next.js para coletar mensagens completas de canais do Telegram. O sistema permite autenticação com código/2FA, seleção dinâmica do canal monitorado e streaming em tempo real das mensagens.
+Momentum é um conjunto de serviços para ingestão de sinais do Telegram, normalização com OpenAI e exposição via painel administrativo. O backend (FastAPI) captura mensagens em tempo real, processa-as em uma fila assíncrona e armazena apenas os sinais estruturados dos últimos 24 h. O frontend (Next.js 14) oferece um painel responsivo com navegação estilo painel no desktop e tab bar no mobile.
+
+## Principais recursos
+
+- **Estratégias nomeadas (até 5 ativas)**: vincule cada estratégia a um canal Telegram e controle ativar/pausar/inativar individualmente.
+- **Parsing com OpenAI**: mensagens recém-recebidas são transformadas em JSON padronizado (`symbol`, `action`, `entry`, `take_profit`, `stop_loss`…).
+- **Fila assíncrona resiliente**: impede sobrecarga da API da OpenAI e aplica retenção automática de 24 h para sinais processados.
+- **Autenticação administrativa**: painel protegido com JWT (e-mail/senha). É possível cadastrar novos administradores autenticados.
+- **Gestão completa do Telegram**: login com código + 2FA, controle de captura (start/pause/stop) e visualização de status.
+- **Streaming opcional**: WebSocket `/ws/messages` permanece disponível para integradores que precisem do feed bruto.
 
 ## Requisitos
 
 - Python 3.11+
-- Node.js 18+ e npm
-- Docker 24+ (opcional, para implantação containerizada)
+- Node.js 18+
+- npm 9+
+- (Opcional) Docker 24+ para deploy containerizado
 - Credenciais do Telegram (API ID / API Hash) disponíveis em [my.telegram.org](https://my.telegram.org/)
+- Chave da OpenAI (modelo `gpt-4o`/`gpt-4o-mini` ou compatível com `responses.create`)
 
-## Arquitetura
+## Variáveis de ambiente
 
-O backend foi reorganizado seguindo princípios de Clean Architecture e SOLID:
+Crie um `.env` na raiz (o backend lê automaticamente com `python-dotenv`). Principais chaves:
 
-- `app/core` – configuração, logging, fábrica FastAPI e container de dependências
-- `app/domain` – portas (interfaces) usadas pelas camadas superiores
-- `app/infrastructure` – implementações concretas (SQLite)
-- `app/services` – integrações externas (Telegram, WebSocket)
-- `app/application` – casos de uso (Auth, Channel, Messages)
-- `app/presentation` – routers FastAPI e WebSockets
+| Variável | Obrigatório | Descrição |
+| --- | --- | --- |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` | ✓ | Credenciais do Telegram |
+| `TELEGRAM_SESSION_NAME` | | Nome do arquivo de sessão (default `telegram_session`) |
+| `TELEGRAM_INITIAL_HISTORY` | | Mensagens históricas a buscar ao configurar um canal (default 200) |
+| `DATABASE_PATH` | | Caminho do SQLite (default `data/app.db`) |
+| `OPENAI_API_KEY` | ✓ | Chave da OpenAI para parsing dos sinais |
+| `OPENAI_MODEL` | | Modelo (default `gpt-4o-mini`) |
+| `SIGNAL_RETENTION_HOURS` | | Horas a manter sinais processados (default 24) |
+| `SIGNAL_WORKERS` | | Workers da fila de parsing (default 2) |
+| `ADMIN_TOKEN_SECRET` | ✓ | Segredo JWT para autenticação administrativa |
+| `ADMIN_TOKEN_EXP_MINUTES` | | Expiração do token (default 1440 ≈ 24 h) |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | | Se informados, cria o administrador inicial no primeiro boot |
+| `CORS_ALLOW_ORIGINS` | | Lista separada por vírgula de origens autorizadas |
 
-O frontend permanece isolado em `frontend/` com Next.js 14 e Tailwind.
+O frontend (`frontend/.env.local`) pode apontar para a API caso você altere portas ou exposes via proxy:
 
-## Execução local (sem Docker)
+```
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_API_WS_URL=ws://localhost:8000
+```
+
+## Execução local
 
 ### Backend
 
@@ -33,11 +54,10 @@ O frontend permanece isolado em `frontend/` com Next.js 14 e Tailwind.
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env  # preencha com suas credenciais
 uvicorn app.main:app --reload
 ```
 
-Endpoints em `http://localhost:8000` (REST) e `ws://localhost:8000/ws/messages`.
+A API REST fica em `http://localhost:8000`, WebSocket em `ws://localhost:8000/ws/messages`.
 
 ### Frontend
 
@@ -47,70 +67,79 @@ npm install
 npm run dev
 ```
 
-Painel em [http://localhost:3000](http://localhost:3000). Ajuste `NEXT_PUBLIC_API_BASE_URL`/`NEXT_PUBLIC_API_WS_URL` se modificar portas.
+Painel disponível em `http://localhost:3000`.
 
-## Deploy automatizado (DigitalOcean / produção)
+## Autenticação administrativa
 
-O projeto inclui um script que prepara um host Ubuntu na DigitalOcean (ou ambiente compatível) e entrega o stack completo com HTTPS no domínio `momentum.roosoars.com`.
+1. Defina `ADMIN_TOKEN_SECRET` (e opcionalmente `ADMIN_EMAIL` / `ADMIN_PASSWORD`).
+2. Inicie o backend; se o e-mail/senha padrão forem fornecidos, o usuário é criado automaticamente.
+3. No painel, informe o e-mail/senha para receber um token. O token é armazenado no `localStorage` e enviado em `Authorization: Bearer` para todas as chamadas protegidas.
+4. Administradores autenticados podem criar novos usuários em **Administrador → Criar novo administrador**.
 
-1. Configure o DNS do domínio apontando `momentum.roosoars.com` para o IP do servidor.
-2. Faça login no servidor e clone o repositório.
-3. Copie e ajuste as variáveis:
-   ```bash
-   cp .env.example .env
-   ```
-4. Torne o script executável e rode a implantação:
-   ```bash
-   chmod +x scripts/deploy.sh
-   sudo scripts/deploy.sh
-   ```
-   O script instala Docker/Compose, preenche o `.env` com os dados solicitados (API do Telegram, e-mail para TLS, etc.), constrói os containers e executa o `docker compose up -d --build`. Ao final, oferece rodar automaticamente `scripts/authorize.py` dentro do container para concluir a autenticação com o Telegram.
+## Fluxo para estratégias e sinais
 
-Serviços atendidos via Caddy (TLS automático):
+1. Autentique-se e abra a aba **Estratégias**.
+2. Informe nome e canal (`@username`, ID numérico ou link `https://t.me/...`).
+3. Ao ativar (máx. 5 simultâneas), o backend mantém o canal em escuta e envia novas mensagens para a fila de parsing.
+4. O parser solicita ao modelo da OpenAI o JSON padronizado. Sucessos são salvos com `status=parsed`; falhas permanecem registradas com `status=failed` e o erro retornado.
+5. A aba **Painel** permite selecionar uma estratégia e visualizar os sinais processados (os mais recentes dentro das últimas 24 h).
 
-- Painel Next.js: `https://momentum.roosoars.com`
-- API FastAPI: `https://momentum.roosoars.com/api`
-- WebSocket: `wss://momentum.roosoars.com/ws/messages`
+Sinais com mais de `SIGNAL_RETENTION_HOURS` são limpos automaticamente após cada processamento para manter o banco enxuto.
 
-Volumes persistem banco SQLite (`./data`) e sessão do Telegram (`./state`). O backend utiliza `TELEGRAM_SESSION_NAME=/app/state/telegram_session` para manter a autorização entre deploys.
+## Principais endpoints
 
-Comandos úteis (executar na raiz do projeto):
+### Autenticação administrativa
+- `POST /api/admin/login` → `{ access_token, token_type }`
+- `POST /api/admin/register` *(requer token)* → cria novo admin
+- `GET /api/admin/me` *(requer token)* → dados do administrador atual
 
-```bash
-docker compose logs -f backend
-docker compose restart frontend
-docker compose run --rm backend python scripts/authorize.py
-docker compose down
+### Estratégias & sinais *(requer token)*
+- `GET /api/strategies`
+- `POST /api/strategies` `{ name, channel_identifier, activate }`
+- `PATCH /api/strategies/{id}` `{ name }`
+- `POST /api/strategies/{id}/channel` `{ channel_identifier }`
+- `POST /api/strategies/{id}/(activate|deactivate|pause|resume)`
+- `DELETE /api/strategies/{id}`
+- `GET /api/strategies/{id}/signals?limit=100&newer_than=ISO8601`
+
+### Sessão do Telegram *(requer token)*
+- `GET /api/auth/status`
+- `POST /api/auth/send-code` `{ phone }`
+- `POST /api/auth/verify-code` `{ code }`
+- `POST /api/auth/password` `{ password }`
+- `POST /api/auth/logout`
+
+### Configuração legacy *(requer token)*
+- `GET /api/config`
+- `POST /api/config/channel` `{ channels: ["@canal"], reset_history }`
+- `POST /api/config/capture/(start|stop|pause|resume|clear-history)`
+
+### Mensagens brutas
+- `GET /api/messages?limit=200&channel_id=` *(para depuração)*
+- `WS /ws/messages` *(histórico + eventos `message`/`signal`)*
+
+## Estrutura do projeto
+
 ```
-
-> Para executar o stack Docker localmente sem domínio, ajuste `SITE_DOMAIN`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_WS_URL` e `CORS_ALLOW_ORIGINS` no `.env`, mantendo as portas `127.0.0.1:8000` e `127.0.0.1:3000` liberadas apenas para loopback.
-
-## Endpoints principais
-
-- `POST /api/auth/send-code` – envia código ao telefone
-- `POST /api/auth/verify-code` – valida o código, indicando 2FA se necessário
-- `POST /api/auth/password` – confirma a senha do segundo fator
-- `POST /api/auth/logout` – encerra a sessão atual
-- `GET /api/auth/status` – status de conexão/autorização
-- `POST /api/config/channel` – troca o canal monitorado (`channel_id`, `reset_history`)
-- `GET /api/config` – configuração salva e status atual
-- `GET /api/messages` – histórico persistido (`?limit=` / `?channel_id=`)
-- `ws://host/ws/messages` – streaming (`history` inicial + `message` para novos eventos)
-
-O script `python scripts/authorize.py` continua disponível para autorizar a sessão via terminal.
-
-## Fluxo de uso
-
-1. No painel, informe o telefone e clique em “Enviar código”.
-2. Digite o código recebido; confirme senha 2FA se solicitado.
-3. Com a sessão ativa, informe o ID ou `@username` do canal e salve.
-4. O histórico inicial (configurável) é sincronizado e novas mensagens entram em tempo real.
-
-Mensagens e payloads integrais ficam em `data/app.db`. Ajuste `DATABASE_PATH` se usar outro volume ou driver.
+app/
+  application/      # Casos de uso (Auth, Channel, Strategy, Message)
+  core/             # Configuração, container, logging
+  domain/           # Modelos e portas (interfaces)
+  infrastructure/   # Persistência SQLite
+  presentation/     # Routers FastAPI e WebSocket
+  services/         # Integrações (Telegram, OpenAI parser, fila)
+frontend/
+  app/              # Next.js App Router, layout e páginas
+  ...
+```
 
 ## Observações
 
-- A conta precisa ter permissão de leitura no canal monitorado.
-- Persistir o diretório `state/` é essencial para não perder a sessão Telegram nos deploys.
-- Considere adicionar autenticação adicional (reverse proxy, OAuth) antes de expor o painel publicamente.
->>>>>>> e7c57b3 (feature: telegram connector e painel administrador)
+- A fila (`SignalProcessor`) aceita novos listeners – por padrão, os sinais processados também são emitidos via WebSocket (`type: "signal"`).
+- Se `OPENAI_API_KEY` não estiver configurada ou o modelo retornar erro, o registro é mantido com `status="failed"` e o campo `error` preenchido.
+- Mensagens históricas antigas não são reprocessadas automaticamente; apenas sinais recebidos após a vinculação do canal (timestamp ≥ `channel_linked_at`) entram na fila.
+- Sempre persista o diretório `state/` (sessão Telegram) e `data/` (SQLite) em produção.
+
+## Licença
+
+Projeto de uso interno. Ajuste conforme necessário antes de expor publicamente.

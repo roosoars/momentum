@@ -36,3 +36,19 @@ def get_telegram_service(container: ApplicationContainer = Depends(get_container
 
 def get_persistence_gateway(container: ApplicationContainer = Depends(get_container)):
     return container.persistence
+
+
+def get_strategy_service(container: ApplicationContainer = Depends(get_container)):
+    return container.strategy_service
+
+
+def get_signal_processor(container: ApplicationContainer = Depends(get_container)):
+    return container.signal_processor
+
+
+def get_signal_parser(container: ApplicationContainer = Depends(get_container)):
+    return container.signal_parser
+
+
+def get_admin_auth_service(container: ApplicationContainer = Depends(get_container)):
+    return container.admin_auth_service

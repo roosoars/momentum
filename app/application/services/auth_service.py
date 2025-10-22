@@ -27,3 +27,8 @@ class AuthService:
 
     async def log_out(self) -> None:
         await self._telegram.log_out()
+        self._settings.set_setting("channel_id", "")
+        self._settings.set_setting("channel_title", "")
+        self._settings.set_setting("channel_input", "")
+        self._settings.set_setting("channels", "[]")
+        self._settings.set_setting("channel_inputs", "[]")

@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 from telethon import TelegramClient, events, functions, types
 from telethon.errors import (
@@ -149,7 +149,13 @@ class TelegramService:
         logger.info("Telegram session logged out.")
 
     # ------------------------------------------------------------------ #
-    async def set_channels(self, channel_identifiers: List[str], reset_history: bool = True) -> List[Dict[str, Any]]:
+    async def set_channels(
+        self,
+        channel_identifiers: List[str],
+        *,
+        reset_history: bool = True,
+        ingest_history: bool = True,
+    ) -> List[Dict[str, Any]]:
         await self._ensure_connection()
         if not self._authorized:
             raise ValueError("Autentique-se no Telegram antes de configurar o canal.")
@@ -170,20 +176,13 @@ class TelegramService:
             channel_infos: List[Dict[str, Any]] = []
 
             for channel_identifier in unique:
-                try:
-                    entity = await self._client.get_entity(channel_identifier)
-                except (ChannelInvalidError, ValueError):
-                    entity = await self._resolve_entity(channel_identifier)
-                    if entity is None:
-                        raise ValueError(f"Canal inválido ou inacessível: {channel_identifier}")
-
-                canonical_id = str(get_peer_id(entity))
-                title = getattr(entity, "title", None) or getattr(entity, "username", None) or canonical_id
+                entity, canonical_id, title = await self._fetch_channel_entity(channel_identifier)
 
                 if reset_history:
                     self._messages.clear_messages_for_channel(canonical_id)
 
-                await self._ingest_history(entity, canonical_id)
+                if ingest_history:
+                    await self._ingest_history(entity, canonical_id)
 
                 entities[canonical_id] = entity
                 channel_infos.append({"channel_id": canonical_id, "title": title})
@@ -201,8 +200,32 @@ class TelegramService:
             return channel_infos
 
     async def set_channel(self, channel_identifier: str, reset_history: bool = True) -> Dict[str, Any]:
-        result = await self.set_channels([channel_identifier], reset_history=reset_history)
+        result = await self.set_channels(
+            [channel_identifier], reset_history=reset_history, ingest_history=True
+        )
         return result[0]
+
+    async def resolve_channel(self, channel_identifier: str) -> Dict[str, Any]:
+        await self._ensure_connection()
+        if not self._authorized:
+            raise ValueError("Autentique-se no Telegram antes de consultar canais.")
+        entity, canonical_id, title = await self._fetch_channel_entity(channel_identifier)
+        async with self._lock:
+            self._channel_entities.setdefault(canonical_id, entity)
+            self._channel_titles.setdefault(canonical_id, title)
+        return {"channel_id": canonical_id, "title": title}
+
+    async def _fetch_channel_entity(self, channel_identifier: str) -> Tuple[object, str, str]:
+        try:
+            entity = await self._client.get_entity(channel_identifier)
+        except (ChannelInvalidError, ValueError):
+            entity = await self._resolve_entity(channel_identifier)
+            if entity is None:
+                raise ValueError(f"Canal inválido ou inacessível: {channel_identifier}")
+
+        canonical_id = str(get_peer_id(entity))
+        title = getattr(entity, "title", None) or getattr(entity, "username", None) or canonical_id
+        return entity, canonical_id, title
 
     async def _resolve_entity_from_dialogs(self, identifier: str) -> Optional[object]:
         """Fallback resolution by iterating dialogs when get_entity fails."""

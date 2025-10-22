@@ -31,9 +31,11 @@ Este documento descreve passo a passo como preparar, configurar e implantar o pr
    cp .env.example .env
    ```
 3. **Editar `.env`**
-   - Preencha `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `TELEGRAM_PHONE` e, se desejar, `TELEGRAM_CHANNEL_ID`.
+   - Preencha `TELEGRAM_API_ID`, `TELEGRAM_API_HASH` e, se necessário, `TELEGRAM_PHONE` / `TELEGRAM_CHANNEL_ID`.
+   - Informe `OPENAI_API_KEY` (obrigatório para o parser de sinais) e ajuste `OPENAI_MODEL` se preferir outro modelo compatível.
+   - Defina `ADMIN_TOKEN_SECRET` (obrigatório), além de `ADMIN_EMAIL`/`ADMIN_PASSWORD` caso queira provisionar o primeiro administrador automaticamente.
    - Ajuste `SITE_DOMAIN`, `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_WS_URL` e `CORS_ALLOW_ORIGINS` conforme o ambiente (ex.: `http://localhost:8000` / `ws://localhost:8000` para desenvolvimento).
-   - Defina `CADDY_ADMIN_EMAIL` com um e-mail válido (obrigatório para emissão automática de certificados em produção).
+   - Configure `CADDY_ADMIN_EMAIL` com um e-mail válido (obrigatório para emissão automática de certificados em produção).
 
 ---
 
@@ -53,6 +55,7 @@ Este documento descreve passo a passo como preparar, configurar e implantar o pr
 3. Endpoints disponíveis:
    - REST: `http://localhost:8000`
    - WebSocket: `ws://localhost:8000/ws/messages`
+4. O painel e todas as rotas REST (exceto `/api/admin/login`) exigem token Bearer. Utilize o painel ou um cliente HTTP para chamar `POST /api/admin/login` com as credenciais administrativas e reutilizar o `access_token` retornado nas requisições subsequentes.
 
 ### 3.2. Frontend (Next.js)
 1. Instalar dependências:
@@ -181,6 +184,7 @@ Após conclusão:
 2. Adicionar camada de autenticação no painel (ex.: OAuth, Basic Auth via Caddy ou middleware).
 3. Configurar monitoramento (UptimeRobot, Healthchecks, etc.) e alertas para quedas da API.
 4. Avaliar substituição do SQLite por banco gerenciado se o volume de mensagens crescer significativamente.
+5. Ajustar `SIGNAL_RETENTION_HOURS` caso necessite armazenar sinais por mais tempo do que o padrão de 24 h.
 
 ---
 

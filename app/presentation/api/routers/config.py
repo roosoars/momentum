@@ -3,14 +3,19 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ....application.services.channel_service import ChannelService
+from ....domain.models import User
 from ....core.dependencies import get_channel_service
+from ...api.dependencies import require_admin_user
 from ...api.schemas.channel import ChannelConfig
 
 router = APIRouter(prefix="/api/config", tags=["Channel Configuration"])
 
 
 @router.get("")
-async def get_config(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def get_config(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     return channel_service.current_configuration()
 
 
@@ -18,6 +23,7 @@ async def get_config(channel_service: ChannelService = Depends(get_channel_servi
 async def update_channel(
     payload: ChannelConfig,
     channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
 ) -> Dict[str, Any]:
     channels_requested = payload.channels
     try:
@@ -34,6 +40,7 @@ async def update_channel(
 @router.get("/channels/available")
 async def list_available_channels(
     channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
 ) -> Dict[str, Any]:
     try:
         items = await channel_service.list_available_channels()
@@ -43,7 +50,10 @@ async def list_available_channels(
 
 
 @router.post("/capture/pause")
-async def capture_pause(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def capture_pause(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     try:
         state = channel_service.pause_capture()
     except ValueError as exc:
@@ -52,7 +62,10 @@ async def capture_pause(channel_service: ChannelService = Depends(get_channel_se
 
 
 @router.post("/capture/resume")
-async def capture_resume(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def capture_resume(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     try:
         state = channel_service.resume_capture()
     except ValueError as exc:
@@ -61,7 +74,10 @@ async def capture_resume(channel_service: ChannelService = Depends(get_channel_s
 
 
 @router.post("/capture/stop")
-async def capture_stop(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def capture_stop(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     try:
         state = await channel_service.stop_capture()
     except ValueError as exc:
@@ -70,7 +86,10 @@ async def capture_stop(channel_service: ChannelService = Depends(get_channel_ser
 
 
 @router.post("/capture/start")
-async def capture_start(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def capture_start(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     try:
         state = await channel_service.start_capture()
     except ValueError as exc:
@@ -79,7 +98,10 @@ async def capture_start(channel_service: ChannelService = Depends(get_channel_se
 
 
 @router.post("/capture/clear-history")
-async def capture_clear_history(channel_service: ChannelService = Depends(get_channel_service)) -> Dict[str, Any]:
+async def capture_clear_history(
+    channel_service: ChannelService = Depends(get_channel_service),
+    _: User = Depends(require_admin_user),
+) -> Dict[str, Any]:
     try:
         await channel_service.clear_history()
     except ValueError as exc:
