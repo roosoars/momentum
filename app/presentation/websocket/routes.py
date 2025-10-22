@@ -1,9 +1,9 @@
 import logging
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ...application.services.message_service import MessageQueryService
-from ...core.dependencies import get_message_service, get_stream_manager
+from ...core.container import ApplicationContainer
 from ...services.message_stream import MessageStreamManager
 
 router = APIRouter()
@@ -12,11 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 @router.websocket("/ws/messages")
-async def websocket_messages(
-    websocket: WebSocket,
-    manager: MessageStreamManager = Depends(get_stream_manager),
-    message_service: MessageQueryService = Depends(get_message_service),
-) -> None:
+async def websocket_messages(websocket: WebSocket) -> None:
+    container: ApplicationContainer = getattr(websocket.app.state, "container", None)  # type: ignore[attr-defined]
+    if not container:
+        logger.error("Application container not initialised for websocket connection.")
+        await websocket.close(code=1011)
+        return
+
+    manager: MessageStreamManager = container.stream_manager
+    message_service: MessageQueryService = container.message_service
+
     await manager.connect(websocket)
     try:
         history_payload = message_service.get_recent_messages(limit=50)

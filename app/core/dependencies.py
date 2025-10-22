@@ -1,15 +1,10 @@
-from typing import Union
-
-from fastapi import Depends, Request, WebSocket
+from fastapi import Depends, Request
 
 from .container import ApplicationContainer
 
 
-Connection = Union[Request, WebSocket]
-
-
-def get_container(connection: Connection) -> ApplicationContainer:
-    container = getattr(connection.app.state, "container", None)  # type: ignore[attr-defined]
+def get_container(request: Request) -> ApplicationContainer:
+    container = getattr(request.app.state, "container", None)
     if not container:
         raise RuntimeError("Application container not initialised.")
     return container
