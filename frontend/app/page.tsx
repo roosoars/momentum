@@ -32,12 +32,20 @@ type Banner = {
   message: string;
 };
 
-const RAW_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
-const RAW_WS_BASE =
-  process.env.NEXT_PUBLIC_API_WS_URL ?? RAW_API_BASE.replace(/^http(s?)/i, "ws$1");
+const resolveApiBaseOnServer = () => {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  return base.replace(/\/$/, "");
+};
 
-const API_BASE = RAW_API_BASE.replace(/\/$/, "");
-const WS_BASE = RAW_WS_BASE.replace(/\/$/, "");
+const resolveWsBaseOnServer = () => {
+  const base =
+    process.env.NEXT_PUBLIC_API_WS_URL ??
+    (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(
+      /^http(s?)/i,
+      "ws$1"
+    );
+  return base.replace(/\/$/, "");
+};
 
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", {
@@ -70,6 +78,21 @@ const SubmitButton = ({
 );
 
 export default function DashboardPage() {
+  const [apiBase] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.location.origin.replace(/\/$/, "");
+    }
+    return resolveApiBaseOnServer();
+  });
+
+  const [wsBase] = useState(() => {
+    if (typeof window !== "undefined") {
+      const protocol = window.location.protocol.startsWith("https") ? "wss:" : "ws:";
+      return `${protocol}//${window.location.host}`.replace(/\/$/, "");
+    }
+    return resolveWsBaseOnServer();
+  });
+
   const [authStatus, setAuthStatus] = useState<AuthStatus | null>(null);
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [phone, setPhone] = useState("");
@@ -95,7 +118,7 @@ export default function DashboardPage() {
   );
 
   const postJSON = async (path: string, body?: unknown) => {
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await fetch(`${apiBase}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -129,7 +152,7 @@ export default function DashboardPage() {
 
   const refreshStatus = async (silent = false) => {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/status`);
+      const response = await fetch(`${apiBase}/api/auth/status`);
       if (!response.ok) {
         throw new Error();
       }
@@ -151,7 +174,7 @@ export default function DashboardPage() {
 
   const refreshConfig = async (silent = false) => {
     try {
-      const response = await fetch(`${API_BASE}/api/config`);
+      const response = await fetch(`${apiBase}/api/config`);
       if (!response.ok) {
         throw new Error();
       }
@@ -174,10 +197,10 @@ export default function DashboardPage() {
   useEffect(() => {
     void refreshStatus(true);
     void refreshConfig(true);
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
-    const socket = new WebSocket(`${WS_BASE}/ws/messages`);
+    const socket = new WebSocket(`${wsBase}/ws/messages`);
     wsRef.current = socket;
 
     const handleMessage = (event: MessageEvent<string>) => {
@@ -235,7 +258,7 @@ export default function DashboardPage() {
       socket.removeEventListener("error", handleError);
       socket.close(1000, "page navigation");
     };
-  }, []);
+  }, [wsBase]);
 
   useEffect(() => {
     if (!scrollerRef.current) {
