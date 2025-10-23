@@ -1410,12 +1410,12 @@ function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onV
 type CaptureButtonProps = {
   label: string;
   action: "pause" | "resume" | "start" | "stop" | "clear-history";
-  loading: string | null;
+  loading: boolean;
   onAction: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
 };
 
 function CaptureButton({ label, action, loading, onAction }: CaptureButtonProps) {
-  const busy = loading === `capture-${action}`;
+  const busy = loading;
   return (
     <button
       onClick={() => onAction(action)}
