@@ -1515,16 +1515,14 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <button
-            type="button"
-            onClick={onLogoutTelegram}
-            disabled={!isAuthorized || isLoggingOut}
-            className="h-14 w-full rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:text-red-50 disabled:border-slate-900 disabled:bg-slate-900/50 disabled:text-slate-500"
-          >
-            {isLoggingOut ? "Encerrando sessão..." : "Encerrar sessão"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onLogoutTelegram}
+          disabled={!isAuthorized || isLoggingOut}
+          className="mt-4 h-14 w-full rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:text-red-50 disabled:border-slate-900 disabled:bg-slate-900/50 disabled:text-slate-500"
+        >
+          {isLoggingOut ? "Encerrando sessão..." : "Encerrar sessão"}
+        </button>
 
       </section>
 
