@@ -1254,7 +1254,7 @@ function StrategiesTab({
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
 
-  const STRATEGY_LIMIT = 4;
+  const STRATEGY_LIMIT = 2;
   const reachedLimit = strategies.length >= STRATEGY_LIMIT;
 
   const statusAppearance: Record<StrategyItem["status"], { label: string; badge: string }> = {
@@ -1428,22 +1428,19 @@ function StrategiesTab({
 
               return (
                 <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
-                  <header className="flex flex-col gap-2 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
-                      </div>
-                      <p className="text-[11px] uppercase tracking-tight text-slate-500">{channelLabel}</p>
+                  <header className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-tight text-slate-500">
-                      <span>Atualizada {updatedAgo}</span>
-                      <span className="hidden sm:inline-block">•</span>
+                      <span>{channelLabel}</span>
+                      <span>•</span>
                       <span>Último sinal {lastSignalAgo}</span>
                     </div>
                   </header>
 
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 grid-cols-2">
                     {canActivate && (
                       <button
                         type="button"
