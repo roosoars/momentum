@@ -1204,6 +1204,7 @@ type StrategiesTabProps = {
   onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
   captureState: TelegramCaptureState | null;
   captureLoading: boolean;
+  refreshChannelsIntervalMs?: number;
 };
 
 function StrategiesTab({
@@ -1221,7 +1222,8 @@ function StrategiesTab({
   setStrategyInFocus,
   onControlCapture,
   captureState,
-  captureLoading
+  captureLoading,
+  refreshChannelsIntervalMs = 10000
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -1266,24 +1268,61 @@ function StrategiesTab({
   const stopDisabled = captureLoading || !captureState?.active;
   const clearDisabled = captureLoading;
 
+  useEffect(() => {
+    let mounted = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = () => {
+      timeoutId = setTimeout(async () => {
+        try {
+          await onRefreshChannels();
+        } finally {
+          if (mounted) {
+            schedule();
+          }
+        }
+      }, refreshChannelsIntervalMs);
+    };
+
+    void onRefreshChannels();
+    schedule();
+
+    return () => {
+      mounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [onRefreshChannels, refreshChannelsIntervalMs]);
+
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
-              <p className="text-xs text-slate-500">
-                Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
+                <h3 className="text-2xl font-semibold text-slate-50">{captureStatusLabel}</h3>
+              </div>
+              <span
+                className={`mt-1 inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
+                  captureState?.active
+                    ? captureState.paused
+                      ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
+                      : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                    : "border border-slate-800 bg-slate-900/60 text-slate-400"
+                }`}
+              >
+                {captureState?.active ? (captureState.paused ? "Pausada" : "Ativa") : "Desligada"}
+              </span>
             </div>
-            <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {captureStatusLabel}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => onControlCapture("start")}
                 disabled={startDisabled}
-                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
               >
                 Iniciar
               </button>
@@ -1291,7 +1330,7 @@ function StrategiesTab({
                 type="button"
                 onClick={() => onControlCapture("stop")}
                 disabled={stopDisabled}
-                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
               >
                 Parar
               </button>
@@ -1299,7 +1338,7 @@ function StrategiesTab({
                 type="button"
                 onClick={() => onControlCapture("clear-history")}
                 disabled={clearDisabled}
-                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
               >
                 Limpar histórico
               </button>
@@ -1326,7 +1365,7 @@ function StrategiesTab({
                 onChange={event => setSelectedChannel(event.target.value)}
                 className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
                 required
-                disabled={channelOptions.length === 0 || reachedLimit}
+                disabled={channelsLoading || channelOptions.length === 0 || reachedLimit}
               >
                 <option value="" disabled>
                   Selecione um canal
@@ -1338,21 +1377,11 @@ function StrategiesTab({
                   </option>
                 ))}
               </select>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">
-                  {channelOptions.length
-                    ? "Escolha um canal listado ou atualize para sincronizar novamente."
-                    : "Nenhum canal disponível. Atualize para buscar novos canais."}
-                </p>
-                <button
-                  type="button"
-                  onClick={onRefreshChannels}
-                  disabled={channelsLoading}
-                  className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                >
-                  {channelsLoading ? "Atualizando..." : "Atualizar canais"}
-                </button>
-              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {channelOptions.length
+                  ? "Escolha um canal listado; a lista é sincronizada automaticamente."
+                  : "Nenhum canal disponível no momento. Aguarde a próxima sincronização automática."}
+              </p>
             </div>
 
             <button
@@ -1365,15 +1394,6 @@ function StrategiesTab({
             {reachedLimit && (
               <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>
             )}
-            <div
-              className={`rounded-xl border px-4 py-3 text-xs font-semibold uppercase tracking-widest ${
-                reachedLimit
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                  : "border-slate-800 bg-slate-900/60 text-slate-300"
-              }`}
-            >
-              Limite de {STRATEGY_LIMIT} estratégias simultâneas
-            </div>
           </form>
         </div>
       </section>
