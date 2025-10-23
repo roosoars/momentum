@@ -1277,7 +1277,7 @@ function StrategiesTab({
     strategies.map(item => item.channel_id).filter((value): value is string => Boolean(value))
   ).size;
   const baseButtonClass =
-    "rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600";
+    "rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600";
   const monitorButtonClass = `${baseButtonClass} hover:border-blue-500/60 hover:text-blue-300`;
   const dangerButtonClass = `${baseButtonClass} hover:border-red-500/60 hover:text-red-300`;
   const [channelsRefreshedAt, setChannelsRefreshedAt] = useState<Date | null>(null);
@@ -1348,51 +1348,48 @@ function StrategiesTab({
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
                 <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
-                <h3 className="text-2xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
-                <p className="mt-2 text-xs text-slate-500">
-                  Última sincronização {lastRefreshDescription}. Próxima atualização {nextRefreshDescription}.
+                <div className="flex flex-wrap items-center gap-3">
+                  <h3 className="text-xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
+                      captureState?.active
+                        ? captureState.paused
+                          ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
+                          : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                        : "border border-slate-800 bg-slate-900/60 text-slate-400"
+                    }`}
+                  >
+                    {monitorBadgeLabel}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s.
                 </p>
               </div>
-              <span
-                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
-                  captureState?.active
-                    ? captureState.paused
-                      ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
-                      : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                    : "border border-slate-800 bg-slate-900/60 text-slate-400"
-                }`}
-              >
-                {monitorBadgeLabel}
-              </span>
-            </div>
+              <div className="rounded-2xl border border-slate-900 bg-slate-900/60 px-4 py-3 text-sm text-slate-300 shadow-inner shadow-black/20">
+                <p className="text-[11px] uppercase tracking-widest text-slate-500">Última sincronização</p>
+                <p className="text-sm font-semibold text-slate-100">{lastRefreshDescription}</p>
+                <p className="mt-2 text-[11px] uppercase tracking-widest text-slate-500">Próxima atualização</p>
+                <p className="text-sm font-semibold text-slate-100">{nextRefreshDescription}</p>
+                {channelsLoading && <p className="mt-2 text-[11px] font-semibold uppercase tracking-widest text-blue-300">Sincronizando canais…</p>}
+              </div>
+            </header>
 
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Canais sincronizados</p>
-                <p className="mt-1 text-lg font-semibold text-slate-100">{channelOptions.length}</p>
-              </li>
-              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Estratégias ativas</p>
-                <p className="mt-1 text-lg font-semibold text-slate-100">
-                  {activeStrategiesCount}/{totalStrategies}
-                </p>
-              </li>
-              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Canais em uso</p>
-                <p className="mt-1 text-lg font-semibold text-slate-100">{linkedChannelsCount}</p>
-              </li>
-              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Estratégias pausadas</p>
-                <p className="mt-1 text-lg font-semibold text-slate-100">{pausedStrategiesCount}</p>
-              </li>
-            </ul>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-widest text-slate-500">
-              <span>Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s</span>
-              {channelsLoading && <span className="text-blue-300">Sincronizando canais...</span>}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Canais sincronizados", value: channelOptions.length },
+                { label: "Estratégias ativas", value: `${activeStrategiesCount}/${totalStrategies}` },
+                { label: "Canais em uso", value: linkedChannelsCount },
+                { label: "Estratégias pausadas", value: pausedStrategiesCount }
+              ].map(item => (
+                <div key={item.label} className="rounded-xl border border-slate-900 bg-slate-900/50 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-widest text-slate-500">{item.label}</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-100">{item.value}</p>
+                </div>
+              ))}
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -1500,8 +1497,9 @@ function StrategiesTab({
           <div className="space-y-4">
             {limitedStrategies.map(strategy => {
               const appearance = statusAppearance[strategy.status];
-              const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
-              const lastSignalDisplayFormatted = lastSignalText ? lastSignalText.replace(",", " -") : null;
+              const lastSignalAgo = strategy.last_signal
+                ? formatRelativeTime(new Date(strategy.last_signal.processed_at).getTime(), nowTs)
+                : "Sem sinais recentes";
               const renameActive = editingStrategyId === strategy.id;
               const renameError = renameErrors[strategy.id] ?? null;
               const renameBusy = actionLoading === `${strategy.id}-rename`;
@@ -1513,13 +1511,12 @@ function StrategiesTab({
               const deleteBusy = actionLoading === `${strategy.id}-delete`;
               const canActivate = strategy.status === "inactive";
               const canPauseOrResume = strategy.status === "active" || strategy.status === "paused";
-              const channelLabel = strategy.channel_title ?? "Não vinculado";
-              const channelIdentifier = strategy.channel_identifier || "—";
-              const linkedAt = strategy.channel_linked_at
-                ? formatDateTime(strategy.channel_linked_at).replace(",", " -")
-                : "—";
-              const updatedAt = formatDateTime(strategy.updated_at).replace(",", " -");
-              const createdAt = formatDateTime(strategy.created_at).replace(",", " -");
+              const channelLabel =
+                strategy.channel_title || strategy.channel_identifier || "Não vinculado";
+              const linkedAgo = strategy.channel_linked_at
+                ? formatRelativeTime(new Date(strategy.channel_linked_at).getTime(), nowTs)
+                : "Sem vínculo";
+              const updatedAgo = formatRelativeTime(new Date(strategy.updated_at).getTime(), nowTs);
 
               const startRename = () => {
                 setEditingStrategyId(strategy.id);
@@ -1553,71 +1550,61 @@ function StrategiesTab({
               };
 
               return (
-                <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
+                <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
                   <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-2">
-                      {renameActive ? (
-                        <div className="space-y-2">
-                          <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
-                          <input
-                            value={renameDraft}
-                            onChange={event => setRenameDraft(event.target.value)}
-                            disabled={renameBusy}
-                            className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-slate-500"
-                          />
-                          {renameError && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{renameError}</p>}
-                          <div className="flex flex-wrap gap-2">
-                            <button type="button" onClick={submitRename} disabled={renameBusy} className={monitorButtonClass}>
-                              {renameBusy ? "Salvando..." : "Salvar nome"}
-                            </button>
-                            <button type="button" onClick={cancelRename} disabled={renameBusy} className={monitorButtonClass}>
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
-                            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={startRename}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500 transition hover:text-blue-300"
-                          >
-                            Editar nome
+                    {renameActive ? (
+                      <div className="w-full space-y-3 sm:max-w-md">
+                        <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
+                        <input
+                          value={renameDraft}
+                          onChange={event => setRenameDraft(event.target.value)}
+                          disabled={renameBusy}
+                          className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-slate-500"
+                        />
+                        {renameError && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{renameError}</p>}
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={submitRename} disabled={renameBusy} className={monitorButtonClass}>
+                            {renameBusy ? "Salvando..." : "Salvar"}
+                          </button>
+                          <button type="button" onClick={cancelRename} disabled={renameBusy} className={baseButtonClass}>
+                            Cancelar
                           </button>
                         </div>
-                      )}
-                    </div>
-                    <div className="rounded-lg border border-slate-900 bg-slate-900/60 p-3 text-right">
-                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Último sinal</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-200">
-                        {lastSignalDisplayFormatted ?? "Sem registros recentes"}
-                      </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-widest text-slate-500">
+                          <span>Atualizada {updatedAgo}</span>
+                          <span className="hidden sm:inline-block">•</span>
+                          <span>Último sinal {lastSignalAgo}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={startRename}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500 transition hover:text-blue-300"
+                        >
+                          Editar nome
+                        </button>
+                      </div>
+                    )}
+                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-4 py-3 text-right text-xs text-slate-400">
+                      <p className="uppercase tracking-widest">Canal vinculado</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-200">{channelLabel}</p>
                     </div>
                   </header>
 
-                  <ul className="grid gap-3 sm:grid-cols-3">
-                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
-                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Canal monitorado</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-100">{channelLabel}</p>
-                      <p className="text-[11px] text-slate-500">{channelIdentifier}</p>
-                    </li>
-                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
-                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Vinculação</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-100">{linkedAt}</p>
-                      <p className="text-[11px] text-slate-500">
-                        Estado atual: <span className="font-semibold text-slate-300">{appearance.label}</span>
-                      </p>
-                    </li>
-                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
-                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Histórico</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-100">Criada {createdAt}</p>
-                      <p className="text-[11px] text-slate-500">Última atualização: {updatedAt}</p>
-                    </li>
-                  </ul>
+                  <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
+                      <span className="font-semibold text-slate-200">Vinculação</span> {linkedAgo}
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
+                      <span className="font-semibold text-slate-200">Último sinal</span> {lastSignalAgo}
+                    </span>
+                  </div>
 
                   <div className="flex flex-wrap gap-2">
                     {canActivate && (
