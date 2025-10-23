@@ -750,9 +750,9 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
       <aside className="hidden w-72 border-r border-slate-900 bg-slate-950/85 px-5 py-8 md:flex">
         <div className="flex h-full w-full flex-col">
-          <div className="mb-8">
+          <div className="mb-8 text-center">
             <h2 className="text-xl font-semibold uppercase tracking-[0.5em] text-blue-300">Momentum</h2>
-            <p className="mt-2 text-xs text-slate-500">Plataforma de monitoramento</p>
+            <p className="mt-2 text-xs text-slate-500">Painel Administrativo</p>
           </div>
           <nav className="flex-1 space-y-6">
             {desktopSections.map(section => (
