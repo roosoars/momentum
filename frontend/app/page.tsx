@@ -1550,6 +1550,7 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
       subtitle: "Autorização",
       value: status?.authorized ? "Autorizada" : "Pendente",
       accent: status?.authorized ? ("emerald" as const) : ("amber" as const)
+    }
   ];
 
   return (
