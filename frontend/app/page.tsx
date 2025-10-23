@@ -1457,29 +1457,8 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
     }
   };
 
-  const summaryCards = [
-    {
-      title: status?.connected ? "Sessão sincronizada" : "Aguardando conexão",
-      subtitle: "Conexão",
-      value: status?.connected ? "Online" : "Offline",
-      accent: status?.connected ? ("emerald" as const) : ("slate" as const)
-    },
-    {
-      title: status?.authorized ? status?.account?.display_name ?? "Conta validada" : "Informe o código recebido",
-      subtitle: "Autorização",
-      value: status?.authorized ? "Autorizada" : "Pendente",
-      accent: status?.authorized ? ("emerald" as const) : ("amber" as const)
-    }
-  ];
-
   return (
     <div className="space-y-8">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {summaryCards.map(card => (
-          <SummaryCard key={card.subtitle} title={card.title} subtitle={card.subtitle} value={card.value} accent={card.accent} />
-        ))}
-      </section>
-
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
