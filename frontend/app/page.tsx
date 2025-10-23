@@ -586,7 +586,6 @@ const handleCreateStrategy = useCallback(
 
   const activeStrategy = useMemo(() => strategies.find(item => item.id === selectedStrategyId), [strategies, selectedStrategyId]);
   const activeSignals = selectedStrategyId ? signalsMap[selectedStrategyId] ?? [] : [];
-  const captureLoading = actionLoading?.startsWith("capture-") ?? false;
 
   if (!initialised) {
     return (
@@ -616,9 +615,10 @@ const handleCreateStrategy = useCallback(
           onRefreshSignals={() => (selectedStrategyId ? fetchSignals(selectedStrategyId) : Promise.resolve())}
           loading={actionLoading === "refresh-signals"}
           telegramStatus={telegramStatus}
-          captureState={channelConfig?.capture_state ?? telegramStatus?.capture}
           signalsPage={signalsPage}
           onChangePage={setSignalsPage}
+          onClearHistory={() => controlCapture("clear-history")}
+          clearHistoryLoading={actionLoading === "capture-clear-history"}
         />
       )}
       {activeTab === "strategies" && (
@@ -633,9 +633,6 @@ const handleCreateStrategy = useCallback(
           channelOptions={availableChannels}
           onRefreshChannels={fetchAvailableChannels}
           channelsLoading={channelsLoading}
-          onControlCapture={controlCapture}
-          captureState={channelConfig?.capture_state ?? telegramStatus?.capture ?? null}
-          captureLoading={captureLoading}
         />
       )}
       {activeTab === "telegram" && (
@@ -646,9 +643,6 @@ const handleCreateStrategy = useCallback(
           onSendCode={sendTelegramCode}
           onVerifyCode={verifyTelegramCode}
           onLogoutTelegram={logoutTelegramSession}
-          onControlCapture={controlCapture}
-          captureState={telegramStatus?.capture ?? null}
-          captureLoading={captureLoading}
         />
       )}
       {activeTab === "signals" && (
@@ -661,6 +655,8 @@ const handleCreateStrategy = useCallback(
           loading={actionLoading === "refresh-signals"}
           signalsPage={signalsPage}
           onChangePage={setSignalsPage}
+          onClearHistory={() => controlCapture("clear-history")}
+          clearHistoryLoading={actionLoading === "capture-clear-history"}
         />
       )}
     </DashboardLayout>
@@ -860,12 +856,25 @@ type HomeTabProps = {
   onRefreshSignals: () => Promise<void>;
   loading: boolean;
   telegramStatus: TelegramStatus | null;
-  captureState?: TelegramCaptureState | null;
   signalsPage: number;
   onChangePage: Dispatch<SetStateAction<number>>;
+  onClearHistory: () => Promise<void>;
+  clearHistoryLoading: boolean;
 };
 
-function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState, signalsPage, onChangePage }: HomeTabProps) {
+function HomeTab({
+  strategies,
+  selectedStrategyId,
+  onSelectStrategy,
+  signals,
+  onRefreshSignals,
+  loading,
+  telegramStatus,
+  signalsPage,
+  onChangePage,
+  onClearHistory,
+  clearHistoryLoading,
+}: HomeTabProps) {
   const totalStrategies = strategies.length;
   const activeCount = strategies.filter(item => item.status === "active").length;
   const pausedCount = strategies.filter(item => item.status === "paused").length;
@@ -895,16 +904,10 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard title="Estratégias" subtitle="Total configuradas" value={totalStrategies.toString()} accent="blue" />
         <SummaryCard title="Ativas" subtitle="Capturando sinais" value={activeCount.toString()} accent="emerald" />
         <SummaryCard title="Pausadas" subtitle="Aguardando retomada" value={pausedCount.toString()} accent="amber" />
-        <SummaryCard
-          title="Captura"
-          subtitle="Status do Telegram"
-          value={captureState?.active ? (captureState.paused ? "Pausada" : "Ativa") : "Desligada"}
-          accent={captureState?.active ? (captureState.paused ? "amber" : "emerald") : "slate"}
-        />
       </section>
 
       <section className="hidden flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30 md:flex">
@@ -934,6 +937,13 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
               className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
             >
               Atualizar
+            </button>
+            <button
+              onClick={onClearHistory}
+              disabled={clearHistoryLoading}
+              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
+            >
+              {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
             </button>
           </div>
         </div>
@@ -995,9 +1005,22 @@ type SignalsTabProps = {
   loading: boolean;
   signalsPage: number;
   onChangePage: Dispatch<SetStateAction<number>>;
+  onClearHistory: () => Promise<void>;
+  clearHistoryLoading: boolean;
 };
 
-function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, signalsPage, onChangePage }: SignalsTabProps) {
+function SignalsTab({
+  strategies,
+  selectedStrategyId,
+  onSelectStrategy,
+  signals,
+  onRefreshSignals,
+  loading,
+  signalsPage,
+  onChangePage,
+  onClearHistory,
+  clearHistoryLoading,
+}: SignalsTabProps) {
   const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
   const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
   const SIGNALS_PER_PAGE = 3;
@@ -1048,6 +1071,13 @@ function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals,
             className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
           >
             Atualizar
+          </button>
+          <button
+            onClick={onClearHistory}
+            disabled={clearHistoryLoading}
+            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
+          >
+            {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
           </button>
         </div>
       </header>
@@ -1205,9 +1235,6 @@ type StrategiesTabProps = {
   channelOptions: ChannelOption[];
   onRefreshChannels: () => Promise<void>;
   channelsLoading: boolean;
-  onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
-  captureState: TelegramCaptureState | null;
-  captureLoading: boolean;
   refreshChannelsIntervalMs?: number;
 };
 
@@ -1222,9 +1249,6 @@ function StrategiesTab({
   channelOptions,
   onRefreshChannels,
   channelsLoading,
-  onControlCapture,
-  captureState,
-  captureLoading,
   refreshChannelsIntervalMs = 10000
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
@@ -1261,24 +1285,6 @@ function StrategiesTab({
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
   const creationDisabled = reachedLimit || actionLoading === "create-strategy" || !canSubmit;
   const limitedStrategies = strategies.slice(0, STRATEGY_LIMIT);
-  const monitorStatusLabel = captureState?.active
-    ? captureState.paused
-      ? "Monitoramento pausado"
-      : "Monitoramento ativo"
-    : "Monitoramento desligado";
-  const monitorBadgeLabel = captureState?.active ? (captureState.paused ? "Pausada" : "Em execução") : "Desligado";
-  const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
-  const stopDisabled = captureLoading || !captureState?.active;
-  const clearDisabled = captureLoading;
-  const activeStrategiesCount = strategies.filter(item => item.status === "active").length;
-  const pausedStrategiesCount = strategies.filter(item => item.status === "paused").length;
-  const linkedChannelsCount = new Set(
-    strategies.map(item => item.channel_id).filter((value): value is string => Boolean(value))
-  ).size;
-  const baseButtonClass =
-    "rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600";
-  const monitorButtonClass = `${baseButtonClass} hover:border-blue-500/60 hover:text-blue-300`;
-  const dangerButtonClass = `${baseButtonClass} hover:border-red-500/60 hover:text-red-300`;
   const [nowTs, setNowTs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -1328,78 +1334,14 @@ function StrategiesTab({
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="flex flex-col justify-between rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-            <header className="space-y-2">
-              <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <h3 className="text-xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
-                <span
-                  className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
-                    captureState?.active
-                      ? captureState.paused
-                        ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
-                        : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                      : "border border-slate-800 bg-slate-900/60 text-slate-400"
-                  }`}
-                >
-                  {monitorBadgeLabel}
-                </span>
-              </div>
-              <p className="text-xs uppercase tracking-widest text-slate-500">
-                Sincronização automática
-                {channelsLoading && <span className="ml-2 text-blue-300">— sincronizando…</span>}
-              </p>
-            </header>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                { label: "Canais sincronizados", value: channelOptions.length },
-                { label: "Estratégias ativas", value: activeStrategiesCount },
-                { label: "Canais em uso", value: linkedChannelsCount },
-                { label: "Estratégias pausadas", value: pausedStrategiesCount }
-              ].map(item => (
-                <div key={item.label} className="rounded-xl border border-slate-900 bg-slate-900/50 p-4 text-center">
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500">{item.label}</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-100">{item.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onControlCapture("start")}
-                disabled={startDisabled}
-                className={monitorButtonClass}
-              >
-                Iniciar monitoramento
-              </button>
-              <button
-                type="button"
-                onClick={() => onControlCapture("stop")}
-                disabled={stopDisabled}
-                className={monitorButtonClass}
-              >
-                Encerrar monitoramento
-              </button>
-              <button
-                type="button"
-                onClick={() => onControlCapture("clear-history")}
-                disabled={clearDisabled}
-                className={dangerButtonClass}
-              >
-                Limpar histórico
-              </button>
-            </div>
+        <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
+            <h3 className="text-2xl font-semibold text-slate-50">Nova estratégia</h3>
+            <p className="text-xs text-slate-500">Defina um nome e selecione um canal vinculado. A lista é sincronizada automaticamente.</p>
           </div>
 
-          <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6" onSubmit={handleCreate}>
-            <div>
-              <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
-              <h3 className="text-2xl font-semibold text-slate-50">Nova estratégia</h3>
-            </div>
-
+          <form className="mt-6 space-y-4" onSubmit={handleCreate}>
             <div>
               <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
               <input
@@ -1419,7 +1361,7 @@ function StrategiesTab({
                 onChange={event => setSelectedChannel(event.target.value)}
                 className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
                 required
-                disabled={channelsLoading || channelOptions.length === 0 || reachedLimit}
+                disabled={channelOptions.length === 0 || reachedLimit}
               >
                 <option value="" disabled>
                   Selecione um canal
@@ -1433,7 +1375,7 @@ function StrategiesTab({
               </select>
               <p className="mt-2 text-xs text-slate-500">
                 {channelOptions.length
-                  ? "Escolha um canal listado; a lista é sincronizada automaticamente."
+                  ? "Escolha um canal listado; a lista é sincronizada automaticamente a cada 10 segundos."
                   : "Nenhum canal disponível no momento. Aguarde a próxima sincronização automática."}
               </p>
             </div>
@@ -1458,7 +1400,7 @@ function StrategiesTab({
             <p className="text-xs uppercase tracking-widest text-slate-500">Estratégias configuradas</p>
             <h3 className="text-lg font-semibold text-slate-50">Painel de controle</h3>
           </div>
-          <button onClick={onRefresh} className={monitorButtonClass}>
+          <button onClick={onRefresh} className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600">
             Atualizar lista
           </button>
         </div>
@@ -1482,17 +1424,17 @@ function StrategiesTab({
               const canActivate = strategy.status === "inactive";
               const canPauseOrResume = strategy.status === "active" || strategy.status === "paused";
               const channelLabel = strategy.channel_title || strategy.channel_identifier || "Não vinculado";
-              const linkedAgo = strategy.channel_linked_at
-                ? formatRelativeTime(new Date(strategy.channel_linked_at).getTime(), nowTs)
-                : "Sem vínculo";
               const updatedAgo = formatRelativeTime(new Date(strategy.updated_at).getTime(), nowTs);
 
               return (
                 <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
                   <header className="flex flex-col gap-2 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
-                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
+                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                      </div>
+                      <p className="text-[11px] uppercase tracking-tight text-slate-500">{channelLabel}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-tight text-slate-500">
                       <span>Atualizada {updatedAgo}</span>
@@ -1501,28 +1443,13 @@ function StrategiesTab({
                     </div>
                   </header>
 
-                  <div className="grid gap-3 text-center text-[11px] uppercase tracking-tight text-slate-500 sm:grid-cols-3">
-                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
-                      <p className="text-xs text-slate-500">Canal</p>
-                      <p className="mt-1 text-base font-semibold text-slate-100">{channelLabel}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
-                      <p className="text-xs text-slate-500">Atualizada</p>
-                      <p className="mt-1 text-base font-semibold text-slate-100">{updatedAgo}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
-                      <p className="text-xs text-slate-500">Último sinal</p>
-                      <p className="mt-1 text-base font-semibold text-slate-100">{lastSignalAgo}</p>
-                    </div>
-                  </div>
-
                   <div className="grid gap-2 sm:grid-cols-3">
                     {canActivate && (
                       <button
                         type="button"
                         onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
                         disabled={activateBusy}
-                        className={`${monitorButtonClass} w-full`}
+                        className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                       >
                         {activateBusy ? "Ativando..." : "Ativar"}
                       </button>
@@ -1532,7 +1459,7 @@ function StrategiesTab({
                         type="button"
                         onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
                         disabled={pauseBusy}
-                        className={`${monitorButtonClass} w-full`}
+                        className="w-full rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                       >
                         {pauseBusy ? "Processando..." : pauseLabel}
                       </button>
@@ -1541,7 +1468,7 @@ function StrategiesTab({
                       type="button"
                       onClick={() => onDelete(strategy.id)}
                       disabled={deleteBusy}
-                      className={`${dangerButtonClass} w-full`}
+                      className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
                     >
                       {deleteBusy ? "Removendo..." : "Remover"}
                     </button>
@@ -1549,7 +1476,6 @@ function StrategiesTab({
                 </article>
               );
             })}
-})}
           </div>
         )}
       </section>
@@ -1564,12 +1490,9 @@ type TelegramTabProps = {
   onSendCode: (phone: string) => Promise<void>;
   onVerifyCode: (code: string) => Promise<void>;
   onLogoutTelegram: () => Promise<void>;
-  onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
-  captureState: TelegramCaptureState | null;
-  captureLoading: boolean;
 };
 
-function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCode, onLogoutTelegram, onControlCapture, captureState, captureLoading }: TelegramTabProps) {
+function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCode, onLogoutTelegram }: TelegramTabProps) {
   const [phoneInput, setPhoneInput] = useState("");
   const [codeInput, setCodeInput] = useState("");
   const [codeReady, setCodeReady] = useState(false);
@@ -1615,12 +1538,6 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
     }
   };
 
-  const captureStatusLabel = captureState?.active
-    ? captureState.paused
-      ? "Captura pausada"
-      : "Captura ativa"
-    : "Captura desligada";
-
   const summaryCards = [
     {
       title: status?.connected ? "Sessão sincronizada" : "Aguardando conexão",
@@ -1633,17 +1550,6 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
       subtitle: "Autorização",
       value: status?.authorized ? "Autorizada" : "Pendente",
       accent: status?.authorized ? ("emerald" as const) : ("amber" as const)
-    },
-    {
-      title: captureState?.active
-        ? captureState.paused
-          ? "Listener pausado"
-          : "Recebendo mensagens"
-        : "Listener inativo",
-      subtitle: "Captura",
-      value: captureStatusLabel,
-      accent: captureState?.active ? (captureState.paused ? ("amber" as const) : ("emerald" as const)) : ("slate" as const)
-    }
   ];
 
   return (
