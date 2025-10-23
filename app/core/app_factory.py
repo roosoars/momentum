@@ -13,16 +13,12 @@ from .logging import configure_logging
 from ..application.services.admin_auth_service import AdminAuthService
 from ..application.services.auth_service import AuthService
 from ..application.services.channel_service import ChannelService
-from ..application.services.message_service import MessageQueryService
 from ..application.services.strategy_service import StrategyService
 from ..infrastructure.persistence.sqlite import SQLitePersistence
 from ..presentation.api.routers import admin as admin_router
 from ..presentation.api.routers import auth as auth_router
 from ..presentation.api.routers import config as config_router
-from ..presentation.api.routers import messages as messages_router
 from ..presentation.api.routers import strategies as strategies_router
-from ..presentation.websocket import routes as websocket_routes
-from ..services.message_stream import MessageStreamManager
 from ..services.openai_parser import SignalParser
 from ..services.signal_processor import SignalProcessor
 from ..services.telegram import TelegramService
@@ -46,9 +42,7 @@ def create_application() -> FastAPI:
     app.include_router(admin_router.router)
     app.include_router(auth_router.router)
     app.include_router(config_router.router)
-    app.include_router(messages_router.router)
     app.include_router(strategies_router.router)
-    app.include_router(websocket_routes.router)
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -70,14 +64,12 @@ def _create_lifespan(settings: Settings):
             message_repository=persistence,
             history_limit=settings.initial_history_limit,
         )
-        stream_manager = MessageStreamManager()
         signal_parser = SignalParser(settings.openai_api_key, settings.openai_model)
         signal_processor = SignalProcessor(
             persistence,
             signal_parser,
             retention_hours=settings.signal_retention_hours,
             max_workers=settings.signal_worker_count,
-            callback=stream_manager.broadcast_signal,
         )
         strategy_service = StrategyService(persistence, telegram, signal_processor)
         admin_auth_service = AdminAuthService(
@@ -94,29 +86,24 @@ def _create_lifespan(settings: Settings):
             persistence,
             persistence,
             persistence,
-            stream_manager,
         )
-        message_service = MessageQueryService(persistence)
 
         container = ApplicationContainer(
             settings=settings,
             persistence=persistence,
             telegram_service=telegram,
-            stream_manager=stream_manager,
             signal_parser=signal_parser,
             signal_processor=signal_processor,
             strategy_service=strategy_service,
             admin_auth_service=admin_auth_service,
             auth_service=auth_service,
             channel_service=channel_service,
-            message_service=message_service,
         )
 
         app.state.container = container  # type: ignore[attr-defined]
 
         await signal_processor.start()
         await telegram.start()
-        telegram.add_listener(stream_manager.broadcast_new_message)
         telegram.add_listener(strategy_service.handle_incoming_message)
 
         await strategy_service.initialize()
@@ -137,7 +124,6 @@ def _create_lifespan(settings: Settings):
         try:
             yield
         finally:
-            telegram.remove_listener(stream_manager.broadcast_new_message)
             telegram.remove_listener(strategy_service.handle_incoming_message)
             await signal_processor.stop()
             await telegram.stop()

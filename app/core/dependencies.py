@@ -22,14 +22,6 @@ def get_channel_service(container: ApplicationContainer = Depends(get_container)
     return container.channel_service
 
 
-def get_message_service(container: ApplicationContainer = Depends(get_container)):
-    return container.message_service
-
-
-def get_stream_manager(container: ApplicationContainer = Depends(get_container)):
-    return container.stream_manager
-
-
 def get_telegram_service(container: ApplicationContainer = Depends(get_container)):
     return container.telegram_service
 
