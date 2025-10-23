@@ -841,15 +841,25 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <h3 className="text-lg font-semibold text-slate-50">Sessão do Telegram</h3>
         <p className="mt-2 text-sm text-slate-500">Status atualizado da conexão 24/7 com a conta que alimenta as estratégias.</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatusBadge label="Conexão" value={telegramStatus?.connected ? "Online" : "Offline"} variant={telegramStatus?.connected ? "emerald" : "slate"} />
-          <StatusBadge label="Autorização" value={telegramStatus?.authorized ? "Autorizado" : "Pendente"} variant={telegramStatus?.authorized ? "emerald" : "amber"} />
-          <StatusBadge label="Telefone" value={telegramStatus?.phone_number ?? telegramStatus?.pending_phone ?? "Não informado"} variant="slate" />
-          <StatusBadge
-            label="Canais monitorados"
-            value={(telegramStatus?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
-            variant="slate"
-          />
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs uppercase tracking-widest text-slate-400">Conexão</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">{telegramStatus?.connected ? "Online" : "Offline"}</p>
+            <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Autorização</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">{telegramStatus?.authorized ? "Autorizado" : "Pendente"}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <p className="text-xs uppercase tracking-widest text-slate-400">Usuário</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {telegramStatus?.account?.username
+                ? `@${telegramStatus.account.username}`
+                : telegramStatus?.account?.display_name ?? "Não identificado"}
+            </p>
+            <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Canais monitorados</p>
+            <p className="mt-2 text-sm font-semibold text-slate-100">
+              {(telegramStatus?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
+            </p>
+          </div>
         </div>
       </section>
 
