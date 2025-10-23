@@ -1270,7 +1270,6 @@ function StrategiesTab({
   const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
   const stopDisabled = captureLoading || !captureState?.active;
   const clearDisabled = captureLoading;
-  const totalStrategies = strategies.length;
   const activeStrategiesCount = strategies.filter(item => item.status === "active").length;
   const pausedStrategiesCount = strategies.filter(item => item.status === "paused").length;
   const linkedChannelsCount = new Set(
@@ -1280,20 +1279,10 @@ function StrategiesTab({
     "rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-slate-700 hover:text-slate-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600";
   const monitorButtonClass = `${baseButtonClass} hover:border-blue-500/60 hover:text-blue-300`;
   const dangerButtonClass = `${baseButtonClass} hover:border-red-500/60 hover:text-red-300`;
-  const [channelsRefreshedAt, setChannelsRefreshedAt] = useState<Date | null>(null);
-  const [nextChannelRefreshAt, setNextChannelRefreshAt] = useState<Date | null>(null);
   const [nowTs, setNowTs] = useState(() => Date.now());
   const [editingStrategyId, setEditingStrategyId] = useState<number | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [renameErrors, setRenameErrors] = useState<Record<number, string | null>>({});
-  const lastRefreshDescription = channelsRefreshedAt
-    ? formatRelativeTime(channelsRefreshedAt.getTime(), nowTs)
-    : channelsLoading
-      ? "Sincronizando..."
-      : "Aguardando sincronização";
-  const nextRefreshDescription = nextChannelRefreshAt
-    ? formatRelativeTime(nextChannelRefreshAt.getTime(), nowTs)
-    : "—";
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1307,33 +1296,29 @@ function StrategiesTab({
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const refreshChannels = async () => {
-      try {
-        await onRefreshChannels();
-        if (mounted) {
-          setChannelsRefreshedAt(new Date());
-        }
-      } catch {
-        /* Ignored: erros já exibidos via banner */
-      }
-    };
-
     const schedule = () => {
-      const next = new Date(Date.now() + refreshChannelsIntervalMs);
-      setNextChannelRefreshAt(next);
       timeoutId = setTimeout(async () => {
-        await refreshChannels();
+        try {
+          await onRefreshChannels();
+        } catch {
+          /* erros já exibidos via banner */
+        }
         if (mounted) {
           schedule();
         }
       }, refreshChannelsIntervalMs);
     };
 
-    refreshChannels().finally(() => {
+    (async () => {
+      try {
+        await onRefreshChannels();
+      } catch {
+        /* erros já exibidos via banner */
+      }
       if (mounted) {
         schedule();
       }
-    });
+    })();
 
     return () => {
       mounted = false;
@@ -1348,46 +1333,40 @@ function StrategiesTab({
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-            <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="text-xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
-                  <span
-                    className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
-                      captureState?.active
-                        ? captureState.paused
-                          ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
-                          : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                        : "border border-slate-800 bg-slate-900/60 text-slate-400"
-                    }`}
-                  >
-                    {monitorBadgeLabel}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s.
-                </p>
+            <header className="space-y-2">
+              <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3 className="text-xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
+                <span
+                  className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
+                    captureState?.active
+                      ? captureState.paused
+                        ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
+                        : "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                      : "border border-slate-800 bg-slate-900/60 text-slate-400"
+                  }`}
+                >
+                  {monitorBadgeLabel}
+                </span>
               </div>
-              <div className="rounded-2xl border border-slate-900 bg-slate-900/60 px-4 py-3 text-sm text-slate-300 shadow-inner shadow-black/20">
-                <p className="text-[11px] uppercase tracking-widest text-slate-500">Última sincronização</p>
-                <p className="text-sm font-semibold text-slate-100">{lastRefreshDescription}</p>
-                <p className="mt-2 text-[11px] uppercase tracking-widest text-slate-500">Próxima atualização</p>
-                <p className="text-sm font-semibold text-slate-100">{nextRefreshDescription}</p>
-                {channelsLoading && <p className="mt-2 text-[11px] font-semibold uppercase tracking-widest text-blue-300">Sincronizando canais…</p>}
-              </div>
+              <p className="text-xs text-slate-500">
+                Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s.
+                {channelsLoading && <span className="ml-2 text-blue-300">Sincronizando…</span>}
+              </p>
             </header>
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: "Canais sincronizados", value: channelOptions.length },
-                { label: "Estratégias ativas", value: `${activeStrategiesCount}/${totalStrategies}` },
+                { label: "Estratégias ativas", value: activeStrategiesCount },
                 { label: "Canais em uso", value: linkedChannelsCount },
                 { label: "Estratégias pausadas", value: pausedStrategiesCount }
               ].map(item => (
                 <div key={item.label} className="rounded-xl border border-slate-900 bg-slate-900/50 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-widest text-slate-500">{item.label}</p>
-                  <p className="mt-1 text-lg font-semibold text-slate-100">{item.value}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] uppercase tracking-widest text-slate-500">{item.label}</span>
+                    <span className="text-sm font-semibold text-slate-100">{item.value}</span>
+                  </div>
                 </div>
               ))}
             </div>
