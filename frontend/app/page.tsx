@@ -159,6 +159,12 @@ const NAV_ITEMS: NavItem[] = [
   }
 ];
 
+const NAV_SECTIONS: Array<{ title: string; items: TabKey[] }> = [
+  { title: "Resumo", items: ["home"] },
+  { title: "Operações", items: ["strategies"] },
+  { title: "Conexões", items: ["telegram"] }
+];
+
 export default function DashboardPage() {
   const [apiBase] = useState(() => {
     if (typeof window !== "undefined") {
@@ -522,6 +528,9 @@ const handleCreateStrategy = useCallback(
       try {
         await apiFetch(`/api/config/capture/${action}`, { method: "POST" });
         await fetchTelegramSuite();
+        if (action === "clear-history") {
+          setSignalsMap({});
+        }
         setBanner({ type: "success", message: "Estado de captura atualizado." });
       } catch (error) {
         setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao atualizar captura." });
@@ -529,7 +538,7 @@ const handleCreateStrategy = useCallback(
         setActionLoading(null);
       }
     },
-    [apiFetch, fetchTelegramSuite]
+    [apiFetch, fetchTelegramSuite, setSignalsMap]
   );
 
   const activeStrategy = useMemo(() => strategies.find(item => item.id === selectedStrategyId), [strategies, selectedStrategyId]);
@@ -674,41 +683,62 @@ type DashboardLayoutProps = {
 };
 
 function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }: DashboardLayoutProps) {
-  const desktopNavItems = NAV_ITEMS.filter(item => !item.mobileOnly);
+  const navMap = NAV_ITEMS.reduce<Partial<Record<TabKey, NavItem>>>((acc, item) => {
+    acc[item.id] = item;
+    return acc;
+  }, {});
+  const desktopSections = NAV_SECTIONS.map(section => ({
+    title: section.title,
+    items: section.items
+      .map(id => navMap[id])
+      .filter((item): item is NavItem => Boolean(item) && !item.mobileOnly)
+  })).filter(section => section.items.length > 0);
   const mobileNavItems = NAV_ITEMS;
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      <aside className="hidden w-72 flex-col items-center border-r border-slate-900 bg-slate-950/80 px-4 py-6 md:flex">
-        <div className="mb-8 text-center">
-          <h2 className="text-lg font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</h2>
-          <p className="mt-1 text-xs text-slate-500">Painel administrativo</p>
-        </div>
-        <nav className="flex w-full flex-1 flex-col gap-2">
-          {desktopNavItems.map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`flex items-center justify-start gap-3 rounded-xl px-3 py-3 text-left transition ${
-                activeTab === item.id
-                  ? "bg-blue-600/20 text-blue-200 ring-1 ring-inset ring-blue-500/40"
-                  : "hover:bg-slate-900/60 text-slate-300"
-              }`}
-            >
-              <span className={`rounded-lg border ${activeTab === item.id ? "border-blue-500/40 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"} p-2 text-sm`}>{item.icon}</span>
-              <span>
-                <span className="block text-sm font-semibold">{item.label}</span>
-                {item.description && <span className="block text-xs text-slate-500">{item.description}</span>}
-              </span>
-            </button>
-          ))}
-        </nav>
-        <div className="mt-6 w-full">
+      <aside className="hidden w-72 border-r border-slate-900 bg-slate-950/85 px-5 py-8 md:flex">
+        <div className="flex h-full w-full flex-col">
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold uppercase tracking-[0.5em] text-blue-300">Momentum</h2>
+            <p className="mt-2 text-xs text-slate-500">Plataforma de monitoramento</p>
+          </div>
+          <nav className="flex-1 space-y-6">
+            {desktopSections.map(section => (
+              <div key={section.title}>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{section.title}</p>
+                <div className="mt-3 space-y-2">
+                  {section.items.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition ${
+                        activeTab === item.id
+                          ? "bg-blue-600/20 text-blue-200 ring-1 ring-inset ring-blue-500/40"
+                          : "text-slate-300 hover:bg-slate-900/60"
+                      }`}
+                    >
+                      <span
+                        className={`rounded-lg border p-2 text-sm ${
+                          activeTab === item.id ? "border-blue-500/40 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      <span>
+                        <span className="block text-sm font-semibold">{item.label}</span>
+                        {item.description && <span className="block text-xs text-slate-500">{item.description}</span>}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </nav>
           <button
             onClick={onLogout}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+            className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
           >
-            <span aria-hidden className="text-lg">🚪</span>
             Sair
           </button>
         </div>
@@ -719,9 +749,8 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
             <span className="text-base font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</span>
             <button
               onClick={onLogout}
-              className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
             >
-              <span aria-hidden className="text-sm">🚪</span>
               Sair
             </button>
           </div>
@@ -783,6 +812,9 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
   const activeCount = strategies.filter(item => item.status === "active").length;
   const pausedCount = strategies.filter(item => item.status === "paused").length;
   const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
+  const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
+  const HOME_SIGNAL_LIMIT = 3;
+  const limitedSignals = sanitisedSignals.slice(0, HOME_SIGNAL_LIMIT);
 
   const handleSelect = (value: string) => {
     if (!value) {
@@ -844,14 +876,14 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
             <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
               Escolha uma estratégia para visualizar os sinais mais recentes.
             </div>
-          ) : signals.length === 0 ? (
+          ) : sanitisedSignals.length === 0 ? (
             <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
               Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
             </div>
           ) : (
-            <div className="flex h-full flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
-              {signals.map((signal, index) => (
-                <SignalCard key={signal.id} signal={signal} sequence={index + 1} />
+            <div className="flex h-full max-h-[380px] flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
+              {limitedSignals.map((signal, index) => (
+                <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - index} />
               ))}
             </div>
           )}
@@ -878,6 +910,7 @@ type SignalsTabProps = {
 
 function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading }: SignalsTabProps) {
   const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
+  const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
 
   const handleSelect = (value: string) => {
     if (!value) {
@@ -924,14 +957,14 @@ function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals,
         <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
           Escolha uma estratégia acima para visualizar os sinais mais recentes.
         </div>
-      ) : signals.length === 0 ? (
+      ) : sanitisedSignals.length === 0 ? (
         <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
           Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
         </div>
       ) : (
-        <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
-          {signals.map((signal, index) => (
-            <SignalCard key={signal.id} signal={signal} sequence={index + 1} />
+        <div className="flex flex-1 max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
+          {sanitisedSignals.map((signal, index) => (
+            <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - index} />
           ))}
         </div>
       )}
@@ -968,6 +1001,28 @@ type SignalCardProps = {
   sequence: number;
 };
 
+const sanitizeSignals = (signals: StrategySignal[]): StrategySignal[] => {
+  return [...signals]
+    .filter(signal => {
+      if (!signal || signal.status !== "parsed" || signal.error) {
+        return false;
+      }
+      const payload = signal.parsed_payload ?? {};
+      const symbol = String(payload?.symbol ?? payload?.pair ?? "").trim().toUpperCase();
+      const action = String(payload?.action ?? "").trim().toUpperCase();
+      const entry = normaliseEntry(payload?.entry ?? payload?.price ?? "NA");
+      const hasValidAction = action === "BUY" || action === "SELL";
+      const hasValidSymbol = Boolean(symbol) && symbol !== "NA";
+      const hasValidEntry = entry !== "NA";
+      return hasValidAction && hasValidSymbol && hasValidEntry;
+    })
+    .sort((a, b) => {
+      const aTime = new Date(a.processed_at).getTime();
+      const bTime = new Date(b.processed_at).getTime();
+      return Number.isNaN(bTime) || Number.isNaN(aTime) ? 0 : bTime - aTime;
+    });
+};
+
 function SignalCard({ signal, sequence }: SignalCardProps) {
   const payload = signal.parsed_payload ?? {};
   const symbol = String(payload.symbol ?? payload.pair ?? "NA").toUpperCase();
@@ -976,65 +1031,53 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
   const maxEntry = normaliseEntry(payload.max_entry ?? "NA");
   const takeProfit = normaliseArray(payload.take_profit ?? payload.tp ?? []);
   const stopLoss = normaliseEntry(payload.stop_loss ?? payload.sl ?? "NA");
-  const timeframe = String(payload.timeframe ?? "NA").toUpperCase();
   const tpDisplay = takeProfit.length ? takeProfit.join(" · ") : "NA";
+  const showMaxEntry = maxEntry !== "NA" && maxEntry !== entry;
 
-  const actionAccent =
+  const actionStyles =
     action === "BUY"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 shadow-emerald-500/10"
-      : action === "SELL"
-      ? "border-red-500/30 bg-red-500/10 text-red-200 shadow-red-500/10"
-      : "border-blue-500/30 bg-blue-500/10 text-blue-200 shadow-blue-500/10";
+      ? "bg-blue-500/15 text-blue-200 border-blue-500/40"
+      : "bg-red-500/15 text-red-200 border-red-500/40";
 
-  const actionEmoji = action === "BUY" ? "🚀" : action === "SELL" ? "📉" : "⚙️";
-
-  const statusBadge =
-    signal.status === "parsed"
-      ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-      : signal.status === "failed"
-      ? "border border-red-500/40 bg-red-500/10 text-red-200"
-      : "border border-slate-700 bg-slate-900/70 text-slate-200";
-
-  const detailChips: { label: string; value: string; emoji: string }[] = [
-    { label: "Entrada", value: entry, emoji: "📍" },
-    ...(maxEntry !== "NA" ? [{ label: "Entrada máx.", value: maxEntry, emoji: "🔝" }] : []),
-    { label: "Take Profit", value: tpDisplay, emoji: "🎯" },
-    { label: "Stop Loss", value: stopLoss, emoji: "🛡️" },
-    { label: "Timeframe", value: timeframe, emoji: "⏱️" }
-  ];
+  const stopLossIcon = "🛑";
 
   return (
     <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-5 shadow-lg shadow-black/35">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl shadow-[0_0_30px] ${actionAccent}`}>{actionEmoji}</span>
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
-            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <h4 className="text-xl font-semibold text-slate-50">{symbol}</h4>
-              <span className="text-sm font-semibold uppercase tracking-wide text-slate-300">{action}</span>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h4 className="text-2xl font-semibold uppercase tracking-tight text-slate-50">{symbol}</h4>
+            <span className={`rounded-full border px-4 py-1 text-2xl font-semibold uppercase tracking-wide ${actionStyles}`}>{action}</span>
+          </div>
+          <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
+        </div>
+      </header>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada</p>
+          <p className="mt-1 font-semibold text-slate-100">{entry}</p>
+        </div>
+        {showMaxEntry && (
+          <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
+            <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada máx.</p>
+            <p className="mt-1 font-semibold text-slate-100">{maxEntry}</p>
+          </div>
+        )}
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Take Profit</p>
+          <p className="mt-1 font-semibold text-slate-100">{tpDisplay}</p>
+        </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{stopLossIcon}</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-slate-500">Stop Loss</p>
+              <p className="mt-1 font-semibold text-slate-100">{stopLoss}</p>
             </div>
-            <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
           </div>
         </div>
-        <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadge}`}>Status: {signal.status.toUpperCase()}</span>
       </div>
-      <div className="mt-4 grid gap-2 md:grid-cols-3">
-        {detailChips.map(({ label, value, emoji }) => (
-          <div key={label} className="flex items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
-            <span className="text-lg">{emoji}</span>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
-              <p className="font-semibold text-slate-100">{value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-      {signal.error && (
-        <p className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-3 text-xs text-red-200">
-          {signal.error}
-        </p>
-      )}
     </div>
   );
 }
@@ -1065,116 +1108,138 @@ function StrategiesTab({
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
 
+  const STRATEGY_LIMIT = 4;
+  const reachedLimit = strategies.length >= STRATEGY_LIMIT;
+
   const statusAppearance: Record<StrategyItem["status"], { label: string; badge: string }> = {
     active: {
       label: "Ativa",
-      badge: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+      badge: "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
     },
     paused: {
       label: "Pausada",
-      badge: "border-amber-500/40 bg-amber-500/10 text-amber-200"
+      badge: "border border-amber-500/40 bg-amber-500/10 text-amber-200"
     },
     inactive: {
       label: "Inativa",
-      badge: "border-slate-700 bg-slate-900/70 text-slate-300"
+      badge: "border border-slate-700 bg-slate-900/70 text-slate-300"
     }
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedChannel) {
+    if (!selectedChannel || reachedLimit) {
       return;
     }
-    await onCreate(name, selectedChannel);
+    await onCreate(name.trim(), selectedChannel);
     setName("");
     setSelectedChannel("");
   };
 
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
+  const creationDisabled = reachedLimit || actionLoading === "create-strategy" || !canSubmit;
+  const limitedStrategies = strategies.slice(0, STRATEGY_LIMIT);
 
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
-        <p className="text-sm text-slate-500">Defina um nome amigável e selecione um canal do Telegram para monitorar.</p>
-        <form className="mt-4 grid gap-4 md:grid-cols-4" onSubmit={handleCreate}>
-          <div className="md:col-span-2">
-            <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
-            <input
-              value={name}
-              onChange={event => setName(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              required
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-xs uppercase tracking-widest text-slate-400">Canal monitorado</label>
-            <div className="mt-1 flex gap-2">
-              <select
-                value={selectedChannel}
-                onChange={event => setSelectedChannel(event.target.value)}
-                className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                required
-                disabled={channelOptions.length === 0}
-              >
-                <option value="" disabled>
-                  Selecione um canal
-                </option>
-                {channelOptions.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.title}
-                    {option.username ? ` (@${option.username})` : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={onRefreshChannels}
-                disabled={channelsLoading}
-                className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                {channelsLoading ? "..." : "Atualizar"}
-              </button>
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_minmax(0,1fr)]">
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
+              <p className="text-sm text-slate-500">Organize seus sinais nomeando a estratégia e vinculando um canal monitorado.</p>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {channelOptions.length
-                ? "Lista com os canais públicos e privados acessíveis pela sua conta do Telegram."
-                : "Nenhum canal listado ainda. Atualize após autenticar a sessão no Telegram."}
-            </p>
+            <ul className="space-y-2 text-sm text-slate-400">
+              <li>1. Defina um nome curto e fácil de identificar no painel.</li>
+              <li>2. Selecione um canal disponível na sua conta do Telegram.</li>
+              <li>3. Ative a estratégia quando estiver pronto para receber sinais.</li>
+            </ul>
+            <div className={`rounded-xl border px-4 py-3 text-xs font-semibold uppercase tracking-widest ${reachedLimit ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-slate-800 bg-slate-900/60 text-slate-300"}`}>
+              Limite de {STRATEGY_LIMIT} estratégias simultâneas
+            </div>
           </div>
-          <div className="md:col-span-4 flex justify-end">
+
+          <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-5" onSubmit={handleCreate}>
+            <div>
+              <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
+              <input
+                value={name}
+                onChange={event => setName(event.target.value)}
+                disabled={reachedLimit}
+                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                placeholder="Ex.: GBP Scalper"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-xs uppercase tracking-widest text-slate-400">Canal monitorado</label>
+              <div className="mt-1 flex gap-2">
+                <select
+                  value={selectedChannel}
+                  onChange={event => setSelectedChannel(event.target.value)}
+                  className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                  required
+                  disabled={channelOptions.length === 0 || reachedLimit}
+                >
+                  <option value="" disabled>
+                    Selecione um canal
+                  </option>
+                  {channelOptions.map(option => (
+                    <option key={option.id} value={option.id}>
+                      {option.title}
+                      {option.username ? ` (@${option.username})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={onRefreshChannels}
+                  disabled={channelsLoading}
+                  className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                >
+                  {channelsLoading ? "..." : "Atualizar"}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {channelOptions.length
+                  ? "Selecione um canal listado abaixo. Caso não apareça, sincronize novamente com o Telegram."
+                  : "Nenhum canal disponível. Conecte-se ao Telegram e atualize a lista."}
+              </p>
+            </div>
+
             <button
               type="submit"
-              disabled={actionLoading === "create-strategy" || !canSubmit}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              disabled={creationDisabled}
+              className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
             >
-              {actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
+              {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
             </button>
-          </div>
-        </form>
+            {reachedLimit && <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>}
+          </form>
+        </div>
       </section>
 
       <section className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Estratégias configuradas</h3>
-            <p className="text-sm text-slate-500">Gerencie status, canais e ações de cada estratégia.</p>
+            <p className="text-sm text-slate-500">Revise rapidamente status e histórico antes de acionar os comandos.</p>
           </div>
           <button onClick={onRefresh} className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
             Atualizar lista
           </button>
         </div>
-        {strategies.length === 0 ? (
+        {limitedStrategies.length === 0 ? (
           <div className="rounded-xl border border-slate-900 bg-slate-900/40 p-6 text-slate-400">
             Nenhuma estratégia cadastrada. Utilize o formulário acima para criar a primeira.
           </div>
         ) : (
-          <div className="space-y-4">
-            {strategies.map(strategy => {
+          <div className="max-h-[420px] space-y-4 overflow-y-auto pr-1">
+            {limitedStrategies.map(strategy => {
               const appearance = statusAppearance[strategy.status];
               const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
               const lastSignalDisplay = lastSignalText ? lastSignalText.replace(" ", ", ") : null;
-              const createdAtDisplay = formatDateTime(strategy.created_at).replace(" ", ", ");
               const pauseAction = strategy.status === "paused" ? "resume" : "pause";
               const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
               const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
@@ -1185,32 +1250,14 @@ function StrategiesTab({
 
               return (
                 <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-2">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-1">
                       <div className="flex flex-wrap items-center gap-3">
                         <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
                       </div>
-                      <div className="flex flex-col gap-1 text-sm text-slate-300">
-                        <span className="flex items-center gap-2">
-                          <span className="text-lg">📡</span>
-                          {strategy.channel_title ?? "Sem título vinculado"}
-                        </span>
-                        <span className="text-xs text-slate-500">{strategy.channel_identifier}</span>
-                      </div>
-                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Criada em {createdAtDisplay}</p>
-                    </div>
-                    <div className="flex flex-col items-start gap-2 text-left md:items-end md:text-right">
-                      {strategy.channel_id && (
-                        <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
-                          <p className="text-[11px] uppercase tracking-widest text-slate-500">ID do canal</p>
-                          <p className="text-sm font-semibold text-slate-200">{strategy.channel_id}</p>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
-                        <span className="text-lg">🕒</span>
-                        <span>{lastSignalDisplay ? `Último sinal às ${lastSignalDisplay}` : "Sem sinais recentes"}</span>
-                      </div>
+                      <p className="text-sm text-slate-400">{strategy.channel_title ?? strategy.channel_identifier}</p>
+                      <p className="text-sm text-slate-500">{lastSignalDisplay ? `Último sinal em ${lastSignalDisplay}` : "Sem sinais recentes"}</p>
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -1312,49 +1359,40 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
   const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
   const stopDisabled = captureLoading || !captureState?.active;
   const clearDisabled = captureLoading;
-  const toneClasses: Record<"success" | "warning" | "neutral", string> = {
-    success: "border-emerald-500/40 bg-emerald-500/10",
-    warning: "border-amber-500/40 bg-amber-500/10",
-    neutral: "border-slate-800 bg-slate-900/60"
-  };
-  const statusCards: Array<{
-    title: string;
-    value: string;
-    helper: string;
-    tone: "success" | "warning" | "neutral";
-    icon: string;
-  }> = status
-    ? [
-        {
-          title: "Conexão",
-          value: status.connected ? "Online" : "Offline",
-          helper: status.connected ? "Sessão sincronizada" : "Sessão desconectada",
-          tone: status.connected ? "success" : "neutral",
-          icon: "🛰️"
-        },
-        {
-          title: "Autorização",
-          value: status.authorized ? "Autorizada" : "Pendente",
-          helper: status.authorized ? status.account?.display_name ?? "Conta validada" : "Confirme o código recebido",
-          tone: status.authorized ? "success" : "warning",
-          icon: "🔐"
-        },
-        {
-          title: "Captura",
-          value: captureStatusLabel,
-          helper: captureState?.active
-            ? captureState.paused
-              ? "Pausada temporariamente"
-              : "Escutando canais selecionados"
-            : "Listener desligado",
-          tone: captureState?.active ? (captureState.paused ? "warning" : "success") : "neutral",
-          icon: "📡"
-        }
-      ]
-    : [];
+
+  const summaryCards = [
+    {
+      title: status?.connected ? "Sessão sincronizada" : "Aguardando conexão",
+      subtitle: "Conexão",
+      value: status?.connected ? "Online" : "Offline",
+      accent: status?.connected ? ("emerald" as const) : ("slate" as const)
+    },
+    {
+      title: status?.authorized ? status?.account?.display_name ?? "Conta validada" : "Informe o código recebido",
+      subtitle: "Autorização",
+      value: status?.authorized ? "Autorizada" : "Pendente",
+      accent: status?.authorized ? ("emerald" as const) : ("amber" as const)
+    },
+    {
+      title: captureState?.active
+        ? captureState.paused
+          ? "Listener pausado"
+          : "Recebendo mensagens"
+        : "Listener inativo",
+      subtitle: "Captura",
+      value: captureStatusLabel,
+      accent: captureState?.active ? (captureState.paused ? ("amber" as const) : ("emerald" as const)) : ("slate" as const)
+    }
+  ];
 
   return (
     <div className="space-y-8">
+      <section className="grid gap-4 md:grid-cols-3">
+        {summaryCards.map(card => (
+          <SummaryCard key={card.subtitle} title={card.title} subtitle={card.subtitle} value={card.value} accent={card.accent} />
+        ))}
+      </section>
+
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1422,33 +1460,15 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
           </button>
         </div>
 
-        {statusCards.length > 0 && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {statusCards.map(card => (
-              <div key={card.title} className={`rounded-2xl border p-5 text-slate-100 shadow-lg shadow-black/30 ${toneClasses[card.tone]}`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{card.icon}</span>
-                  <div>
-                    <p className="text-xs uppercase tracking-widest">{card.title}</p>
-                    <p className="mt-1 text-sm font-semibold">{card.value}</p>
-                    <p className="text-[11px] text-slate-200/80">{card.helper}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
-            <p className="text-sm text-slate-500">Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.</p>
+            <p className="text-xs text-slate-500">Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.</p>
           </div>
-          <span className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200">
-            {captureStatusLabel}
-          </span>
+          <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {captureStatusLabel}</p>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
