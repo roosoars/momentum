@@ -103,6 +103,25 @@ const formatDateTime = (value: string) =>
     timeStyle: "medium"
   }).format(new Date(value));
 
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
+
+const formatRelativeTime = (targetMs: number, referenceMs: number): string => {
+  const diffSeconds = Math.round((targetMs - referenceMs) / 1000);
+  if (Math.abs(diffSeconds) < 60) {
+    return relativeTimeFormatter.format(diffSeconds, "second");
+  }
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (Math.abs(diffMinutes) < 60) {
+    return relativeTimeFormatter.format(diffMinutes, "minute");
+  }
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) {
+    return relativeTimeFormatter.format(diffHours, "hour");
+  }
+  const diffDays = Math.round(diffHours / 24);
+  return relativeTimeFormatter.format(diffDays, "day");
+};
+
 const HomeIcon = () => (
   <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
     <path d="M3 11.25 12 4l9 7.25V21a.75.75 0 0 1-.75.75H6.75A.75.75 0 0 1 6 21v-6.75h12" strokeLinecap="round" strokeLinejoin="round" />
@@ -187,7 +206,6 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
   const [signalsPage, setSignalsPage] = useState(0);
-  const [strategyInFocus, setStrategyInFocus] = useState<StrategyItem | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -210,16 +228,6 @@ export default function DashboardPage() {
       window.localStorage.removeItem(STORAGE_KEY);
     }
   }, [token]);
-
-  useEffect(() => {
-    if (!strategyInFocus) {
-      return;
-    }
-    const latest = strategies.find(item => item.id === strategyInFocus.id);
-    if (latest && latest !== strategyInFocus) {
-      setStrategyInFocus(latest);
-    }
-  }, [strategyInFocus, strategies]);
 
   useEffect(() => {
     if (!banner) {
@@ -625,8 +633,6 @@ const handleCreateStrategy = useCallback(
           channelOptions={availableChannels}
           onRefreshChannels={fetchAvailableChannels}
           channelsLoading={channelsLoading}
-          strategyInFocus={strategyInFocus}
-          setStrategyInFocus={setStrategyInFocus}
           onControlCapture={controlCapture}
           captureState={channelConfig?.capture_state ?? telegramStatus?.capture ?? null}
           captureLoading={captureLoading}
@@ -1199,8 +1205,6 @@ type StrategiesTabProps = {
   channelOptions: ChannelOption[];
   onRefreshChannels: () => Promise<void>;
   channelsLoading: boolean;
-  strategyInFocus: StrategyItem | null;
-  setStrategyInFocus: Dispatch<SetStateAction<StrategyItem | null>>;
   onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
   captureState: TelegramCaptureState | null;
   captureLoading: boolean;
@@ -1218,8 +1222,6 @@ function StrategiesTab({
   channelOptions,
   onRefreshChannels,
   channelsLoading,
-  strategyInFocus,
-  setStrategyInFocus,
   onControlCapture,
   captureState,
   captureLoading,
@@ -1259,33 +1261,79 @@ function StrategiesTab({
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
   const creationDisabled = reachedLimit || actionLoading === "create-strategy" || !canSubmit;
   const limitedStrategies = strategies.slice(0, STRATEGY_LIMIT);
-  const captureStatusLabel = captureState?.active
+  const monitorStatusLabel = captureState?.active
     ? captureState.paused
-      ? "Captura pausada"
-      : "Captura ativa"
-    : "Captura desligada";
+      ? "Monitoramento pausado"
+      : "Monitoramento ativo"
+    : "Monitoramento desligado";
+  const monitorBadgeLabel = captureState?.active ? (captureState.paused ? "Pausada" : "Em execução") : "Desligado";
   const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
   const stopDisabled = captureLoading || !captureState?.active;
   const clearDisabled = captureLoading;
+  const totalStrategies = strategies.length;
+  const activeStrategiesCount = strategies.filter(item => item.status === "active").length;
+  const pausedStrategiesCount = strategies.filter(item => item.status === "paused").length;
+  const linkedChannelsCount = new Set(
+    strategies.map(item => item.channel_id).filter((value): value is string => Boolean(value))
+  ).size;
+  const baseButtonClass =
+    "rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600";
+  const monitorButtonClass = `${baseButtonClass} hover:border-blue-500/60 hover:text-blue-300`;
+  const dangerButtonClass = `${baseButtonClass} hover:border-red-500/60 hover:text-red-300`;
+  const [channelsRefreshedAt, setChannelsRefreshedAt] = useState<Date | null>(null);
+  const [nextChannelRefreshAt, setNextChannelRefreshAt] = useState<Date | null>(null);
+  const [nowTs, setNowTs] = useState(() => Date.now());
+  const [editingStrategyId, setEditingStrategyId] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameErrors, setRenameErrors] = useState<Record<number, string | null>>({});
+  const lastRefreshDescription = channelsRefreshedAt
+    ? formatRelativeTime(channelsRefreshedAt.getTime(), nowTs)
+    : channelsLoading
+      ? "Sincronizando..."
+      : "Aguardando sincronização";
+  const nextRefreshDescription = nextChannelRefreshAt
+    ? formatRelativeTime(nextChannelRefreshAt.getTime(), nowTs)
+    : "—";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const intervalId = window.setInterval(() => setNowTs(Date.now()), 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
+    const refreshChannels = async () => {
+      try {
+        await onRefreshChannels();
+        if (mounted) {
+          setChannelsRefreshedAt(new Date());
+        }
+      } catch {
+        /* Ignored: erros já exibidos via banner */
+      }
+    };
+
     const schedule = () => {
+      const next = new Date(Date.now() + refreshChannelsIntervalMs);
+      setNextChannelRefreshAt(next);
       timeoutId = setTimeout(async () => {
-        try {
-          await onRefreshChannels();
-        } finally {
-          if (mounted) {
-            schedule();
-          }
+        await refreshChannels();
+        if (mounted) {
+          schedule();
         }
       }, refreshChannelsIntervalMs);
     };
 
-    void onRefreshChannels();
-    schedule();
+    refreshChannels().finally(() => {
+      if (mounted) {
+        schedule();
+      }
+    });
 
     return () => {
       mounted = false;
@@ -1299,14 +1347,17 @@ function StrategiesTab({
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-            <div className="flex items-start justify-between">
+          <div className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
-                <h3 className="text-2xl font-semibold text-slate-50">{captureStatusLabel}</h3>
+                <h3 className="text-2xl font-semibold text-slate-50">{monitorStatusLabel}</h3>
+                <p className="mt-2 text-xs text-slate-500">
+                  Última sincronização {lastRefreshDescription}. Próxima atualização {nextRefreshDescription}.
+                </p>
               </div>
               <span
-                className={`mt-1 inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
+                className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-widest ${
                   captureState?.active
                     ? captureState.paused
                       ? "border border-amber-500/40 bg-amber-500/10 text-amber-200"
@@ -1314,31 +1365,58 @@ function StrategiesTab({
                     : "border border-slate-800 bg-slate-900/60 text-slate-400"
                 }`}
               >
-                {captureState?.active ? (captureState.paused ? "Pausada" : "Ativa") : "Desligada"}
+                {monitorBadgeLabel}
               </span>
             </div>
+
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-slate-500">Canais sincronizados</p>
+                <p className="mt-1 text-lg font-semibold text-slate-100">{channelOptions.length}</p>
+              </li>
+              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-slate-500">Estratégias ativas</p>
+                <p className="mt-1 text-lg font-semibold text-slate-100">
+                  {activeStrategiesCount}/{totalStrategies}
+                </p>
+              </li>
+              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-slate-500">Canais em uso</p>
+                <p className="mt-1 text-lg font-semibold text-slate-100">{linkedChannelsCount}</p>
+              </li>
+              <li className="rounded-xl border border-slate-900 bg-slate-900/50 p-4">
+                <p className="text-[11px] uppercase tracking-widest text-slate-500">Estratégias pausadas</p>
+                <p className="mt-1 text-lg font-semibold text-slate-100">{pausedStrategiesCount}</p>
+              </li>
+            </ul>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] uppercase tracking-widest text-slate-500">
+              <span>Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s</span>
+              {channelsLoading && <span className="text-blue-300">Sincronizando canais...</span>}
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => onControlCapture("start")}
                 disabled={startDisabled}
-                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className={monitorButtonClass}
               >
-                Iniciar
+                Iniciar monitoramento
               </button>
               <button
                 type="button"
                 onClick={() => onControlCapture("stop")}
                 disabled={stopDisabled}
-                className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className={monitorButtonClass}
               >
-                Parar
+                Encerrar monitoramento
               </button>
               <button
                 type="button"
                 onClick={() => onControlCapture("clear-history")}
                 disabled={clearDisabled}
-                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                className={dangerButtonClass}
               >
                 Limpar histórico
               </button>
@@ -1403,19 +1481,20 @@ function StrategiesTab({
         </div>
       </section>
 
-      <section className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <section className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-slate-50">Estratégias configuradas</h3>
-            <p className="text-sm text-slate-500">Revise rapidamente status e histórico antes de acionar os comandos.</p>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Estratégias configuradas</p>
+            <h3 className="text-lg font-semibold text-slate-50">Acompanhe e ajuste em tempo real</h3>
+            <p className="text-sm text-slate-500">Gerencie ativação, pausa e remoção diretamente pelos cartões abaixo.</p>
           </div>
-          <button onClick={onRefresh} className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
+          <button onClick={onRefresh} className={monitorButtonClass}>
             Atualizar lista
           </button>
         </div>
         {limitedStrategies.length === 0 ? (
           <div className="rounded-xl border border-slate-900 bg-slate-900/40 p-6 text-slate-400">
-            Nenhuma estratégia cadastrada. Utilize o formulário acima para criar a primeira.
+            Nenhuma estratégia cadastrada. Utilize o formulário ao lado para criar a primeira configuração.
           </div>
         ) : (
           <div className="space-y-4">
@@ -1423,182 +1502,159 @@ function StrategiesTab({
               const appearance = statusAppearance[strategy.status];
               const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
               const lastSignalDisplayFormatted = lastSignalText ? lastSignalText.replace(",", " -") : null;
+              const renameActive = editingStrategyId === strategy.id;
+              const renameError = renameErrors[strategy.id] ?? null;
+              const renameBusy = actionLoading === `${strategy.id}-rename`;
+              const activateBusy = actionLoading === `${strategy.id}-activate`;
+              const pauseAction = strategy.status === "paused" ? "resume" : "pause";
+              const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
+              const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
+              const pauseBusy = actionLoading === `${strategy.id}-${pauseAction}`;
+              const deleteBusy = actionLoading === `${strategy.id}-delete`;
+              const canActivate = strategy.status === "inactive";
+              const canPauseOrResume = strategy.status === "active" || strategy.status === "paused";
+              const channelLabel = strategy.channel_title ?? "Não vinculado";
+              const channelIdentifier = strategy.channel_identifier || "—";
+              const linkedAt = strategy.channel_linked_at
+                ? formatDateTime(strategy.channel_linked_at).replace(",", " -")
+                : "—";
+              const updatedAt = formatDateTime(strategy.updated_at).replace(",", " -");
+              const createdAt = formatDateTime(strategy.created_at).replace(",", " -");
+
+              const startRename = () => {
+                setEditingStrategyId(strategy.id);
+                setRenameDraft(strategy.name);
+                setRenameErrors(prev => ({ ...prev, [strategy.id]: null }));
+              };
+
+              const cancelRename = () => {
+                setEditingStrategyId(null);
+                setRenameDraft("");
+              };
+
+              const submitRename = async () => {
+                const trimmed = renameDraft.trim();
+                if (!trimmed) {
+                  setRenameErrors(prev => ({ ...prev, [strategy.id]: "Informe um nome válido." }));
+                  return;
+                }
+                setRenameErrors(prev => ({ ...prev, [strategy.id]: null }));
+                try {
+                  await onRename(strategy.id, trimmed);
+                  setEditingStrategyId(null);
+                  setRenameDraft("");
+                } catch (error) {
+                  setRenameErrors(prev => ({
+                    ...prev,
+                    [strategy.id]:
+                      error instanceof Error ? error.message : "Não foi possível renomear a estratégia."
+                  }));
+                }
+              };
 
               return (
-                <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
+                  <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="space-y-2">
+                      {renameActive ? (
+                        <div className="space-y-2">
+                          <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
+                          <input
+                            value={renameDraft}
+                            onChange={event => setRenameDraft(event.target.value)}
+                            disabled={renameBusy}
+                            className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-slate-500"
+                          />
+                          {renameError && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{renameError}</p>}
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={submitRename} disabled={renameBusy} className={monitorButtonClass}>
+                              {renameBusy ? "Salvando..." : "Salvar nome"}
+                            </button>
+                            <button type="button" onClick={cancelRename} disabled={renameBusy} className={monitorButtonClass}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
+                            <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={startRename}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500 transition hover:text-blue-300"
+                          >
+                            Editar nome
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs uppercase tracking-widest text-slate-500">
-                      {lastSignalDisplayFormatted ? `Último sinal: ${lastSignalDisplayFormatted}` : "Sem sinais recentes"}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex justify-end">
+                    <div className="rounded-lg border border-slate-900 bg-slate-900/60 p-3 text-right">
+                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Último sinal</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-200">
+                        {lastSignalDisplayFormatted ?? "Sem registros recentes"}
+                      </p>
+                    </div>
+                  </header>
+
+                  <ul className="grid gap-3 sm:grid-cols-3">
+                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
+                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Canal monitorado</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">{channelLabel}</p>
+                      <p className="text-[11px] text-slate-500">{channelIdentifier}</p>
+                    </li>
+                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
+                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Vinculação</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">{linkedAt}</p>
+                      <p className="text-[11px] text-slate-500">
+                        Estado atual: <span className="font-semibold text-slate-300">{appearance.label}</span>
+                      </p>
+                    </li>
+                    <li className="rounded-lg border border-slate-900 bg-slate-900/60 p-4">
+                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Histórico</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-100">Criada {createdAt}</p>
+                      <p className="text-[11px] text-slate-500">Última atualização: {updatedAt}</p>
+                    </li>
+                  </ul>
+
+                  <div className="flex flex-wrap gap-2">
+                    {canActivate && (
+                      <button
+                        type="button"
+                        onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
+                        disabled={activateBusy}
+                        className={monitorButtonClass}
+                      >
+                        {activateBusy ? "Ativando..." : "Ativar estratégia"}
+                      </button>
+                    )}
+                    {canPauseOrResume && (
+                      <button
+                        type="button"
+                        onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
+                        disabled={pauseBusy}
+                        className={monitorButtonClass}
+                      >
+                        {pauseBusy ? "Processando..." : pauseLabel}
+                      </button>
+                    )}
                     <button
-                      onClick={() => setStrategyInFocus(strategy)}
-                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-800 bg-slate-900/60 text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
+                      type="button"
+                      onClick={() => onDelete(strategy.id)}
+                      disabled={deleteBusy}
+                      className={dangerButtonClass}
                     >
-                      <span className="text-base">⚙️</span>
-                      <span className="sr-only">Configurar estratégia</span>
+                      {deleteBusy ? "Removendo..." : "Remover estratégia"}
                     </button>
                   </div>
-                </div>
+                </article>
               );
             })}
           </div>
         )}
-        {strategyInFocus && (
-          <StrategySettingsModal
-            strategy={strategyInFocus}
-            onClose={() => setStrategyInFocus(null)}
-            onRename={onRename}
-            onCommand={onCommand}
-            onDelete={onDelete}
-            actionLoading={actionLoading}
-          />
-        )}
       </section>
-    </div>
-  );
-}
-
-type StrategySettingsModalProps = {
-  strategy: StrategyItem;
-  onClose: () => void;
-  onRename: (strategyId: number, name: string) => Promise<void>;
-  onCommand: (strategyId: number, path: string, successMessage: string) => Promise<void>;
-  onDelete: (strategyId: number) => Promise<void>;
-  actionLoading: string | null;
-};
-
-function StrategySettingsModal({ strategy, onClose, onRename, onCommand, onDelete, actionLoading }: StrategySettingsModalProps) {
-  const [name, setName] = useState(strategy.name);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const pauseAction = strategy.status === "paused" ? "resume" : "pause";
-  const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
-  const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
-  const canActivate = strategy.status === "inactive";
-  const statusLabel = strategy.status === "active" ? "Ativa" : strategy.status === "paused" ? "Pausada" : "Inativa";
-
-  useEffect(() => {
-    setName(strategy.name);
-    setSaved(false);
-    setError(null);
-  }, [strategy.id, strategy.name]);
-
-  const handleSave = async () => {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Informe um nome válido.");
-      return;
-    }
-    if (trimmed === strategy.name) {
-      setSaved(true);
-      setError(null);
-      return;
-    }
-    setSaving(true);
-    setError(null);
-    try {
-      await onRename(strategy.id, trimmed);
-      setSaved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao salvar alterações.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCommand = async (path: string, successMessage: string) => {
-    if (!saved) {
-      setError("Salve as alterações antes de continuar.");
-      return;
-    }
-    await onCommand(strategy.id, path, successMessage);
-    onClose();
-  };
-
-  const handleDelete = async () => {
-    if (!saved) {
-      setError("Salve as alterações antes de continuar.");
-      return;
-    }
-    await onDelete(strategy.id);
-    onClose();
-  };
-
-  const activateLoading = actionLoading === `${strategy.id}-activate`;
-  const pauseLoading = actionLoading === `${strategy.id}-${pauseAction}`;
-  const deleteLoading = actionLoading === `${strategy.id}-delete`;
-  const renameLoading = saving || actionLoading === `${strategy.id}-rename`;
-  const disableActions = renameLoading || !saved;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-      <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl shadow-black/50">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Configuração</p>
-            <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
-            <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {statusLabel}</p>
-          </div>
-          <button onClick={onClose} className="rounded-full border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300">
-            Fechar
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-xs uppercase tracking-widest text-slate-400">Renomear estratégia</label>
-          <input
-            value={name}
-            onChange={event => {
-              setName(event.target.value);
-              setSaved(false);
-            }}
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-          />
-          <button
-            onClick={handleSave}
-            disabled={renameLoading}
-            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            {renameLoading ? "Salvando..." : "Salvar"}
-          </button>
-        </div>
-
-        {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
-
-        <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Ações rápidas</p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => handleCommand("activate", "Estratégia ativada.")}
-              disabled={disableActions || !canActivate || activateLoading}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-            >
-              {activateLoading ? "Ativando..." : "Ativar"}
-            </button>
-            <button
-              onClick={() => handleCommand(pauseAction, pauseMessage)}
-              disabled={disableActions || strategy.status === "inactive" || pauseLoading}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-amber-400/60 hover:text-amber-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-            >
-              {pauseLoading ? "Aguarde..." : pauseLabel}
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={disableActions || deleteLoading}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-            >
-              {deleteLoading ? "Removendo..." : "Remover"}
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
