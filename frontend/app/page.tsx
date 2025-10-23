@@ -572,6 +572,7 @@ const handleCreateStrategy = useCallback(
 
   const activeStrategy = useMemo(() => strategies.find(item => item.id === selectedStrategyId), [strategies, selectedStrategyId]);
   const activeSignals = selectedStrategyId ? signalsMap[selectedStrategyId] ?? [] : [];
+  const captureLoading = actionLoading?.startsWith("capture-") ?? false;
 
   if (!initialised) {
     return (
@@ -603,6 +604,8 @@ const handleCreateStrategy = useCallback(
           loading={actionLoading === "refresh-signals"}
           telegramStatus={telegramStatus}
           captureState={channelConfig?.capture_state ?? telegramStatus?.capture}
+          captureLoading={captureLoading}
+          onControlCapture={controlCapture}
         />
       )}
       {activeTab === "strategies" && (
@@ -620,6 +623,7 @@ const handleCreateStrategy = useCallback(
           channelsLoading={channelsLoading}
           captureState={telegramStatus?.capture ?? null}
           onControlCapture={controlCapture}
+          captureLoading={captureLoading}
         />
       )}
       {activeTab === "telegram" && (
@@ -805,9 +809,11 @@ type HomeTabProps = {
   loading: boolean;
   telegramStatus: TelegramStatus | null;
   captureState?: TelegramCaptureState | null;
+  captureLoading: boolean;
+  onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
 };
 
-function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState }: HomeTabProps) {
+function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState, captureLoading, onControlCapture }: HomeTabProps) {
   const totalStrategies = strategies.length;
   const activeCount = strategies.filter(item => item.status === "active").length;
   const pausedCount = strategies.filter(item => item.status === "paused").length;
@@ -1086,6 +1092,7 @@ type StrategiesTabProps = {
   channelsLoading: boolean;
   captureState: TelegramCaptureState | null;
   onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
+  captureLoading: boolean;
 };
 
 function StrategiesTab({
@@ -1101,11 +1108,11 @@ function StrategiesTab({
   onRefreshChannels,
   channelsLoading,
   captureState,
-  onControlCapture
+  onControlCapture,
+  captureLoading
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
-  const captureLoading = actionLoading;
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
