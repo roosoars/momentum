@@ -89,7 +89,13 @@ def _create_lifespan(settings: Settings):
             settings.admin_default_email, settings.admin_default_password
         )
         auth_service = AuthService(telegram, persistence)
-        channel_service = ChannelService(telegram, persistence, persistence, stream_manager)
+        channel_service = ChannelService(
+            telegram,
+            persistence,
+            persistence,
+            persistence,
+            stream_manager,
+        )
         message_service = MessageQueryService(persistence)
 
         container = ApplicationContainer(

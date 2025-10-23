@@ -355,6 +355,13 @@ class SQLitePersistence(PersistenceGateway):
             rows = cur.fetchall()
         return [self._row_to_signal(row) for row in rows]
 
+    def clear_signals_for_channel(self, channel_id: str) -> None:
+        with self._lock, self._conn:
+            self._conn.execute(
+                "DELETE FROM strategy_signals WHERE channel_id = ?",
+                (channel_id,),
+            )
+
     def purge_signals_older_than(self, iso_timestamp: str) -> int:
         with self._lock, self._conn:
             cur = self._conn.execute(

@@ -1,9 +1,13 @@
 import json
 from typing import Any, Dict, List
 
-from ...domain.ports.persistence import MessageRepository, SettingsRepository
-from ...services.telegram import TelegramService
+from ...domain.ports.persistence import (
+    MessageRepository,
+    SettingsRepository,
+    StrategySignalRepository,
+)
 from ...services.message_stream import MessageStreamManager
+from ...services.telegram import TelegramService
 
 
 class ChannelService:
@@ -14,11 +18,13 @@ class ChannelService:
         telegram_service: TelegramService,
         settings_repository: SettingsRepository,
         message_repository: MessageRepository,
+        signal_repository: StrategySignalRepository,
         stream_manager: MessageStreamManager,
     ) -> None:
         self._telegram = telegram_service
         self._settings = settings_repository
         self._messages = message_repository
+        self._signals = signal_repository
         self._stream_manager = stream_manager
 
     def current_configuration(self) -> Dict[str, Any]:
@@ -104,7 +110,9 @@ class ChannelService:
         if not channel_ids:
             raise ValueError("Nenhum canal configurado.")
         for channel_id in channel_ids:
-            self._messages.clear_messages_for_channel(channel_id)
+            canonical_id = str(channel_id)
+            self._messages.clear_messages_for_channel(canonical_id)
+            self._signals.clear_signals_for_channel(canonical_id)
         await self._stream_manager.broadcast_history([])
 
     def _load_channels(self) -> List[Dict[str, Any]]:

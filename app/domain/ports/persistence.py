@@ -102,6 +102,9 @@ class StrategySignalRepository(Protocol):
     ) -> List[StrategySignal]:
         ...
 
+    def clear_signals_for_channel(self, channel_id: str) -> None:
+        ...
+
     def purge_signals_older_than(self, iso_timestamp: str) -> int:
         ...
 
