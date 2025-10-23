@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, Dict, List, Optional
 
 from ..domain.models import StrategySignal
@@ -91,7 +91,7 @@ class SignalProcessor:
             job.strategy_id,
             job.telegram_message_id,
         )
-        processed_at = datetime.utcnow()
+        processed_at = datetime.now(timezone.utc)
         status = "parsed"
         error: Optional[str] = None
         payload: Dict[str, object]
@@ -125,12 +125,15 @@ class SignalProcessor:
             parsed_payload=payload,
             status=status,
             error=error,
-            received_at=job.received_at.replace(microsecond=0).isoformat(),
+            received_at=job.received_at.astimezone(timezone.utc).replace(microsecond=0).isoformat(),
             processed_at=processed_at.replace(microsecond=0).isoformat(),
         )
 
-        cutoff = (datetime.utcnow() - self._retention).replace(microsecond=0).isoformat()
-        purged = self._persistence.purge_signals_older_than(cutoff)
+        now_utc = datetime.now(timezone.utc)
+        midnight_cutoff = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        retention_cutoff = (now_utc - self._retention).replace(microsecond=0)
+        cutoff_dt = max(midnight_cutoff, retention_cutoff)
+        purged = self._persistence.purge_signals_older_than(cutoff_dt.isoformat())
         if purged:
             logger.debug("Purged %s expired signals older than %s.", purged, cutoff)
 

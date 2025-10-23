@@ -53,6 +53,8 @@ class TelegramService:
         self._password_required = False
         self._capture_paused = False
         self._capture_active = False
+        self._account_display_name: Optional[str] = None
+        self._account_username: Optional[str] = None
 
     @property
     def is_authorized(self) -> bool:
@@ -65,6 +67,8 @@ class TelegramService:
     # ------------------------------------------------------------------ #
     async def start(self) -> None:
         await self._ensure_connection()
+        if self._authorized:
+            await self._refresh_account_profile()
         logger.info("Telegram client connected (authorized=%s)", self._authorized)
 
     async def stop(self) -> None:
@@ -79,6 +83,25 @@ class TelegramService:
         if not self._client.is_connected():
             await self._client.connect()
         self._authorized = await self._client.is_user_authorized()
+
+    async def _refresh_account_profile(self) -> None:
+        if not self._authorized:
+            self._account_display_name = None
+            self._account_username = None
+            return
+        try:
+            me = await self._client.get_me()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Unable to fetch Telegram profile metadata")
+            return
+        if not me:
+            self._account_display_name = None
+            self._account_username = None
+            return
+        full_name = " ".join(filter(None, [getattr(me, "first_name", None), getattr(me, "last_name", None)])).strip()
+        username = getattr(me, "username", None)
+        self._account_display_name = full_name or username or self._phone_number
+        self._account_username = username
 
     # ------------------------------------------------------------------ #
     async def send_login_code(self, phone: str) -> Dict[str, Any]:
@@ -104,6 +127,7 @@ class TelegramService:
             self._password_required = False
             self._phone_number = self._pending_phone
             self._pending_phone = None
+            await self._refresh_account_profile()
             logger.info("Telegram session authorized for %s", phone_log)
             return {"authorized": True}
         except SessionPasswordNeededError:
@@ -129,6 +153,7 @@ class TelegramService:
         self._password_required = False
         self._phone_number = self._pending_phone or self._phone_number
         self._pending_phone = None
+        await self._refresh_account_profile()
         logger.info("Telegram session authorized with password for %s", phone_log)
         return {"authorized": True}
 
@@ -140,6 +165,8 @@ class TelegramService:
         self._pending_phone = None
         self._phone_number = None
         self._password_required = False
+        self._account_display_name = None
+        self._account_username = None
         if self._handler:
             self._client.remove_event_handler(self._handler)
             self._handler = None
@@ -395,6 +422,11 @@ class TelegramService:
             "capture": {
                 "active": self._capture_active,
                 "paused": self._capture_paused,
+            },
+            "account": {
+                "display_name": self._account_display_name,
+                "username": self._account_username,
+                "phone": self._phone_number,
             },
         }
 

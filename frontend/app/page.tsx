@@ -42,6 +42,12 @@ type TelegramCaptureState = {
   paused: boolean;
 };
 
+type TelegramAccount = {
+  display_name: string | null;
+  username: string | null;
+  phone: string | null;
+};
+
 type TelegramStatus = {
   connected: boolean;
   authorized: boolean;
@@ -52,6 +58,7 @@ type TelegramStatus = {
   channel_titles?: (string | null)[] | null;
   channels?: { id: string; title: string | null }[] | null;
   capture?: TelegramCaptureState;
+  account?: TelegramAccount | null;
 };
 
 type ChannelConfig = {
@@ -245,6 +252,12 @@ export default function DashboardPage() {
   const fetchStrategies = useCallback(async () => {
     const data = await apiFetch<{ items: StrategyItem[]; count: number }>("/api/strategies");
     setStrategies(data.items);
+    setSelectedStrategyId(prev => {
+      if (prev && data.items.some(item => item.id === prev)) {
+        return prev;
+      }
+      return data.items[0]?.id ?? null;
+    });
   }, [apiFetch]);
 
   const fetchSignals = useCallback(
@@ -252,7 +265,9 @@ export default function DashboardPage() {
       const data = await apiFetch<{ items: StrategySignal[]; count: number }>(
         `/api/strategies/${strategyId}/signals?limit=100`
       );
-      setSignalsMap(prev => ({ ...prev, [strategyId]: data.items }));
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const filtered = data.items.filter(item => item.processed_at?.slice(0, 10) === todayIso);
+      setSignalsMap(prev => ({ ...prev, [strategyId]: filtered }));
     },
     [apiFetch]
   );
@@ -300,8 +315,9 @@ export default function DashboardPage() {
       setTelegramStatus(null);
       setChannelConfig(null);
       setAdminProfile(null);
-       setAvailableChannels([]);
-       setChannelsLoading(false);
+      setSelectedStrategyId(null);
+      setAvailableChannels([]);
+      setChannelsLoading(false);
       return;
     }
     (async () => {
@@ -326,6 +342,18 @@ export default function DashboardPage() {
       });
     }
   }, [selectedStrategyId, signalsMap, fetchSignals]);
+
+  useEffect(() => {
+    if (!token || !selectedStrategyId) {
+      return;
+    }
+    const interval = window.setInterval(() => {
+      fetchSignals(selectedStrategyId).catch(() => {
+        /* suppress transient refresh errors */
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [token, selectedStrategyId, fetchSignals]);
 
   const handleLogin = useCallback(
     async (email: string, password: string) => {
@@ -513,25 +541,6 @@ const handleCreateStrategy = useCallback(
     [apiFetch, fetchTelegramSuite]
   );
 
-  const provideTelegramPassword = useCallback(
-    async (password: string) => {
-      setActionLoading("telegram-password");
-      try {
-        await apiFetch("/api/auth/password", {
-          method: "POST",
-          body: JSON.stringify({ password })
-        });
-        await fetchTelegramSuite();
-        setBanner({ type: "success", message: "Senha confirmada." });
-      } catch (error) {
-        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao validar senha." });
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [apiFetch, fetchTelegramSuite]
-  );
-
   const logoutTelegramSession = useCallback(async () => {
     setActionLoading("telegram-logout");
     try {
@@ -609,6 +618,8 @@ const handleCreateStrategy = useCallback(
           channelOptions={availableChannels}
           onRefreshChannels={fetchAvailableChannels}
           channelsLoading={channelsLoading}
+          captureState={telegramStatus?.capture ?? null}
+          onControlCapture={controlCapture}
         />
       )}
       {activeTab === "telegram" && (
@@ -619,9 +630,7 @@ const handleCreateStrategy = useCallback(
           onRefresh={fetchTelegramSuite}
           onSendCode={sendTelegramCode}
           onVerifyCode={verifyTelegramCode}
-          onProvidePassword={provideTelegramPassword}
           onLogoutTelegram={logoutTelegramSession}
-          onControlCapture={controlCapture}
         />
       )}
       {activeTab === "signals" && (
@@ -712,11 +721,12 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
-      <aside className="hidden w-72 flex-col border-r border-slate-900 bg-slate-950/80 px-4 py-6 md:flex">
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold uppercase tracking-[0.4em] text-blue-300">Momentum</h2>
+      <aside className="hidden w-72 flex-col items-center border-r border-slate-900 bg-slate-950/80 px-4 py-6 md:flex">
+        <div className="mb-8 text-center">
+          <h2 className="text-lg font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</h2>
+          <p className="mt-1 text-xs text-slate-500">Painel administrativo</p>
         </div>
-        <nav className="flex flex-1 flex-col gap-2">
+        <nav className="flex w-full flex-1 flex-col gap-2">
           {desktopNavItems.map(item => (
             <button
               key={item.id}
@@ -885,7 +895,7 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
           ) : (
             <div className="flex h-full flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
               {signals.map(signal => (
-                <SignalCard key={signal.id} signal={signal} strategyName={selectedStrategy.name} />
+                <SignalCard key={signal.id} signal={signal} />
               ))}
             </div>
           )}
@@ -895,6 +905,25 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 text-sm text-slate-400 md:hidden">
         <h3 className="text-base font-semibold text-slate-100">Sinais interpretados</h3>
         <p className="mt-2">Acesse a aba “Sinais” na barra inferior para acompanhar os sinais processados em detalhes.</p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
+            <p className="text-sm text-slate-500">Controle o listener principal responsável por captar as mensagens dos canais vinculados.</p>
+          </div>
+          <span className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200">
+            {captureState?.active ? (captureState.paused ? "Captura pausada" : "Captura ativa") : "Captura desligada"}
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <CaptureButton label="Iniciar" action="start" loading={actionLoading} onAction={onControlCapture} />
+          <CaptureButton label="Pausar" action="pause" loading={actionLoading} onAction={onControlCapture} />
+          <CaptureButton label="Retomar" action="resume" loading={actionLoading} onAction={onControlCapture} />
+          <CaptureButton label="Parar" action="stop" loading={actionLoading} onAction={onControlCapture} />
+          <CaptureButton label="Limpar histórico" action="clear-history" loading={actionLoading} onAction={onControlCapture} />
+        </div>
       </section>
     </div>
   );
@@ -964,7 +993,7 @@ function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals,
       ) : (
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
           {signals.map(signal => (
-            <SignalCard key={signal.id} signal={signal} strategyName={selectedStrategy.name} />
+            <SignalCard key={signal.id} signal={signal} />
           ))}
         </div>
       )}
@@ -996,32 +1025,11 @@ function SummaryCard({ title, subtitle, value, accent }: SummaryCardProps) {
   );
 }
 
-type StatusBadgeProps = {
-  label: string;
-  value: string;
-  variant: "emerald" | "amber" | "slate";
-};
-
-function StatusBadge({ label, value, variant }: StatusBadgeProps) {
-  const styles = {
-    emerald: "border-emerald-500/40 bg-emerald-500/10 text-emerald-100",
-    amber: "border-amber-500/40 bg-amber-500/10 text-amber-100",
-    slate: "border-slate-800 bg-slate-900/50 text-slate-200"
-  }[variant];
-  return (
-    <div className={`rounded-xl border p-4 ${styles}`}>
-      <p className="text-xs uppercase tracking-widest text-slate-300/80">{label}</p>
-      <p className="mt-2 text-sm font-semibold">{value}</p>
-    </div>
-  );
-}
-
 type SignalCardProps = {
   signal: StrategySignal;
-  strategyName: string;
 };
 
-function SignalCard({ signal, strategyName }: SignalCardProps) {
+function SignalCard({ signal }: SignalCardProps) {
   const payload = signal.parsed_payload ?? {};
   const symbol = String(payload.symbol ?? payload.pair ?? "NA").toUpperCase();
   const action = String(payload.action ?? "NA").toUpperCase();
@@ -1029,7 +1037,7 @@ function SignalCard({ signal, strategyName }: SignalCardProps) {
   const takeProfit = normaliseArray(payload.take_profit ?? payload.tp ?? []);
   const stopLoss = normaliseEntry(payload.stop_loss ?? payload.sl ?? "NA");
   const tpDisplay = takeProfit.length ? takeProfit.join(" / ") : "NA";
-  const headline = `PAIR: ${symbol} | ACTION: ${action} | ENTRY: ${entry} | TP: ${tpDisplay} | SL: ${stopLoss} — PROVIDER: ${strategyName || "N/A"}`;
+  const headline = `PAIR: ${symbol} | ACTION: ${action} | ENTRY: ${entry} | TP: ${tpDisplay} | SL: ${stopLoss}`;
 
   return (
     <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4 shadow-md shadow-black/25">
@@ -1050,12 +1058,6 @@ function SignalCard({ signal, strategyName }: SignalCardProps) {
           {signal.error}
         </p>
       )}
-      {signal.raw_message && (
-        <details className="mt-3 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-xs text-slate-400">
-          <summary className="cursor-pointer text-slate-300">Mensagem original</summary>
-          <p className="mt-2 whitespace-pre-line text-slate-400">{signal.raw_message}</p>
-        </details>
-      )}
     </div>
   );
 }
@@ -1072,6 +1074,8 @@ type StrategiesTabProps = {
   channelOptions: ChannelOption[];
   onRefreshChannels: () => Promise<void>;
   channelsLoading: boolean;
+  captureState: TelegramCaptureState | null;
+  onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
 };
 
 function StrategiesTab({
@@ -1085,7 +1089,9 @@ function StrategiesTab({
   onRefresh,
   channelOptions,
   onRefreshChannels,
-  channelsLoading
+  channelsLoading,
+  captureState,
+  onControlCapture
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -1314,12 +1320,10 @@ type TelegramTabProps = {
   onRefresh: () => Promise<void>;
   onSendCode: (phone: string) => Promise<void>;
   onVerifyCode: (code: string) => Promise<void>;
-  onProvidePassword: (password: string) => Promise<void>;
   onLogoutTelegram: () => Promise<void>;
-  onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
 };
 
-function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onVerifyCode, onProvidePassword, onLogoutTelegram, onControlCapture }: TelegramTabProps) {
+function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onVerifyCode, onLogoutTelegram }: TelegramTabProps) {
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
@@ -1347,13 +1351,6 @@ function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onV
             loading={actionLoading === "telegram-verify"}
             onSubmit={value => onVerifyCode(value)}
           />
-          <InlineForm
-            label="Senha em duas etapas"
-            placeholder="Senha"
-            submitLabel="Validar"
-            loading={actionLoading === "telegram-password"}
-            onSubmit={value => onProvidePassword(value)}
-          />
           <div className="flex flex-col gap-2">
             <label className="text-xs uppercase tracking-widest text-slate-400">Encerrar sessão</label>
             <button
@@ -1366,36 +1363,27 @@ function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onV
           </div>
         </div>
         {status && (
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatusBadge label="Conectado" value={status.connected ? "Sim" : "Não"} variant={status.connected ? "emerald" : "slate"} />
-            <StatusBadge label="Autorizado" value={status.authorized ? "Sim" : "Não"} variant={status.authorized ? "emerald" : "amber"} />
-            <StatusBadge label="Telefone" value={status.phone_number ?? status.pending_phone ?? "Não informado"} variant="slate" />
-            <StatusBadge label="Captura" value={status.capture?.active ? (status.capture.paused ? "Pausada" : "Ativa") : "Inativa"} variant={status.capture?.active ? (status.capture.paused ? "amber" : "emerald") : "slate"} />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-widest text-slate-400">Conexão</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">{status.connected ? "Online" : "Offline"}</p>
+              <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Autorização</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">{status.authorized ? "Autorizado" : "Pendente"}</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-widest text-slate-400">Usuário</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">
+                {status.account?.username
+                  ? `@${status.account.username}`
+                  : status.account?.display_name ?? "Não identificado"}
+              </p>
+              <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Canais monitorados</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">
+                {(config?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
+              </p>
+            </div>
           </div>
         )}
-      </section>
-
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <h3 className="text-lg font-semibold text-slate-50">Controles de captura</h3>
-        <p className="text-sm text-slate-500">
-          Use estes comandos para pausar ou retomar o listener global quando necessário. As estratégias permanecem vinculadas aos canais configurados.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <CaptureButton label="Iniciar" action="start" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Pausar" action="pause" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Retomar" action="resume" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Parar" action="stop" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Limpar histórico" action="clear-history" loading={actionLoading} onAction={onControlCapture} />
-        </div>
-        <div className="mt-6 rounded-xl border border-slate-900 bg-slate-900/40 p-4 text-xs text-slate-400">
-          <p>
-            Estado atual:{" "}
-            {status?.capture?.active ? (status.capture.paused ? "Captura pausada" : "Captura em execução") : "Captura desligada"}.
-          </p>
-          <p className="mt-1">
-            Monitorando: {(config?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum canal selecionado."}
-          </p>
-        </div>
       </section>
     </div>
   );

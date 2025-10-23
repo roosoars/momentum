@@ -11,58 +11,22 @@ except Exception:  # pragma: no cover - library optional at runtime
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SCHEMA = {
-    "name": "TradingSignal",
-    "schema": {
-        "type": "object",
-        "properties": {
-            "symbol": {
-                "type": "string",
-                "description": "Currency pair or asset ticker in uppercase, e.g., EURUSD.",
-            },
-            "action": {
-                "type": "string",
-                "enum": ["BUY", "SELL", "HOLD", "NONE"],
-                "description": "Trading direction inferred from the signal. Use HOLD when direction is neutral or missing.",
-            },
-            "entry": {
-                "type": "string",
-                "description": "Price level for entry. Use the literal MARKET if signal requests market order.",
-            },
-            "take_profit": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Ordered list of take profit targets. Use an empty array if the signal has no targets.",
-            },
-            "stop_loss": {
-                "type": "string",
-                "description": "Stop loss price. Use NA when not provided.",
-            },
-            "timeframe": {
-                "type": "string",
-                "description": "Optional timeframe or schedule mentioned in the signal. Use NA if absent.",
-            },
-            "notes": {
-                "type": "string",
-                "description": "Additional remarks or context that should accompany the signal. Use NA if none.",
-            },
-        },
-        "required": ["symbol", "action", "entry", "take_profit", "stop_loss"],
-        "additionalProperties": False,
-    },
-}
+_SYSTEM_PROMPT = """You are an assistant that reads raw trading signals written in Portuguese and extracts a concise JSON summary.
 
-_SYSTEM_PROMPT = """You are an assistant that extracts structured trading data from Telegram signals.
-Read the user message and respond strictly in JSON following the provided schema.
+Output strictly a JSON object with the following fields:
+- symbol: uppercase asset ticker/pair (example: EURUSD).
+- action: BUY or SELL. Use BUY for keywords like COMPRAR/LONG; SELL for VENDER/SHORT; NONE when direction is absent.
+- entry: price level as string (e.g. "1.08400"). If the text orders entry "a mercado", "market", or only mentions ranges/points, respond with the literal string "MARKET".
+- take_profit: array of price strings in ascending order. Use an empty array when no explicit target is present.
+- stop_loss: price string. If missing, respond with "NA".
+- timeframe: timeframe mentioned (e.g. "M30"), or "NA" if absent.
 
 Guidelines:
-- Preserve the asset naming in uppercase without extra characters. If multiple assets are mentioned, pick the primary one.
-- Interpret BUY/LONG as BUY and SELL/SHORT as SELL. If direction cannot be inferred, set action to HOLD.
-- Entry should be the numeric price if present; otherwise respond with the literal string MARKET.
-- Take profit must be an array of strings in ascending order. Use an empty array when no targets are present.
-- Stop loss must always have a value; use the literal string NA if not provided.
-- Include timeframe information when explicitly present; otherwise respond with NA.
-- Trim textual noise and never invent data absent from the signal.
+- Ignore decorative characters such as emojis or repeated separators.
+- When the message includes prices separated by line breaks, associate the first price after the instruction "ENTRAR" with entry (if numeric) and any subsequent TP/SL instructions with the respective price on the next line.
+- Convert Portuguese terms (COMPRAR/VENDER, STOP/LOSS, TAKE PROFIT, TEMPO GRÁFICO, HORÁRIO, etc.) into the required English keys.
+- Do not create values if they are not in the message; prefer "MARKET" or "NA" accordingly.
+- Never wrap the JSON in markdown or additional text.
 """
 
 
@@ -73,12 +37,9 @@ class SignalParser:
         self,
         api_key: Optional[str],
         model: str,
-        *,
-        response_schema: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._api_key = api_key
         self._model = model
-        self._schema = response_schema or _DEFAULT_SCHEMA
         if api_key and AsyncOpenAI is not None:
             self._client = AsyncOpenAI(api_key=api_key)
         else:
@@ -103,8 +64,7 @@ class SignalParser:
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": message.strip()},
                 ],
-                response_format={"type": "json_schema", "json_schema": self._schema},
-                temperature=0.2,
+                temperature=0.1,
             )
         except Exception as exc:  # pragma: no cover - depends on external API
             logger.exception("OpenAI API error while parsing signal.")
@@ -125,7 +85,69 @@ class SignalParser:
                 json_payload = "".join(text_chunks).strip()
             if not json_payload:
                 raise ValueError("Empty JSON payload returned by OpenAI.")
-            return json.loads(json_payload)
+            text = json_payload.strip()
+            if not text.startswith("{"):
+                start = text.find("{")
+                end = text.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    text = text[start : end + 1]
+            data = json.loads(text)
+            return self._normalise_payload(data)
         except Exception as exc:
             logger.exception("Failed to parse JSON payload generated by OpenAI.")
             raise RuntimeError(f"Invalid JSON returned by OpenAI: {exc}") from exc
+
+    @staticmethod
+    def _normalise_payload(raw: Dict[str, Any]) -> Dict[str, Any]:
+        def _string(value: Optional[Any], fallback: str = "NA") -> str:
+            if value is None:
+                return fallback
+            text = str(value).strip()
+            return text or fallback
+
+        symbol = _string(raw.get("symbol"), "NA").upper()
+
+        action_raw = _string(raw.get("action"), "NONE").upper()
+        action_map = {
+            "COMPRAR": "BUY",
+            "COMPRA": "BUY",
+            "BUY": "BUY",
+            "LONG": "BUY",
+            "VENDER": "SELL",
+            "VENDA": "SELL",
+            "SELL": "SELL",
+            "SHORT": "SELL",
+        }
+        action = action_map.get(action_raw, action_raw if action_raw in {"BUY", "SELL"} else "NONE")
+
+        entry_raw = _string(raw.get("entry"), "MARKET")
+        entry = entry_raw.upper() if entry_raw.strip().lower() in {"market", "a mercado", "market order"} else entry_raw
+        if entry != "MARKET":
+            entry = entry.replace(" ", "")
+
+        take_profit_value = raw.get("take_profit")
+        if isinstance(take_profit_value, list):
+            take_profit = [
+                _string(item)
+                for item in take_profit_value
+                if _string(item) not in {"", "NA"}
+            ]
+        elif isinstance(take_profit_value, str):
+            take_profit = [_string(take_profit_value)] if take_profit_value.strip() else []
+        else:
+            take_profit = []
+
+        stop_loss = _string(raw.get("stop_loss"))
+        timeframe = _string(raw.get("timeframe"), "NA")
+
+        if not take_profit:
+            take_profit = []
+
+        return {
+            "symbol": symbol,
+            "action": action,
+            "entry": entry if entry else "MARKET",
+            "take_profit": take_profit,
+            "stop_loss": stop_loss,
+            "timeframe": timeframe,
+        }
