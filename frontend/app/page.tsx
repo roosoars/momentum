@@ -928,11 +928,11 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
           </span>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <CaptureButton label="Iniciar" action="start" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Pausar" action="pause" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Retomar" action="resume" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Parar" action="stop" loading={actionLoading} onAction={onControlCapture} />
-          <CaptureButton label="Limpar histórico" action="clear-history" loading={actionLoading} onAction={onControlCapture} />
+          <CaptureButton label="Iniciar" action="start" loading={captureLoading} onAction={onControlCapture} />
+          <CaptureButton label="Pausar" action="pause" loading={captureLoading} onAction={onControlCapture} />
+          <CaptureButton label="Retomar" action="resume" loading={captureLoading} onAction={onControlCapture} />
+          <CaptureButton label="Parar" action="stop" loading={captureLoading} onAction={onControlCapture} />
+          <CaptureButton label="Limpar histórico" action="clear-history" loading={captureLoading} onAction={onControlCapture} />
         </div>
       </section>
     </div>
@@ -1105,6 +1105,7 @@ function StrategiesTab({
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
+  const captureLoading = actionLoading;
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
