@@ -1243,35 +1243,34 @@ function StrategiesTab({
 
               return (
                 <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
-                      </div>
-                      <p className="text-sm text-slate-400">{strategy.channel_title ?? strategy.channel_identifier}</p>
-                      <p className="text-sm text-slate-500">{lastSignalDisplay ? `Último sinal em ${lastSignalDisplay}` : "Sem sinais recentes"}</p>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
                     </div>
+                    <p className="text-xs uppercase tracking-widest text-slate-500">
+                      {lastSignalDisplay ? `Último sinal: ${lastSignalDisplay}` : "Sem sinais recentes"}
+                    </p>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
                       disabled={activateDisabled}
-                      className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
                       Ativar
                     </button>
                     <button
                       onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
                       disabled={strategy.status === "inactive" || pauseLoading}
-                      className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:border-amber-400 hover:text-amber-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-amber-400/60 hover:text-amber-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
                       {pauseLoading ? "..." : pauseLabel}
                     </button>
                     <button
                       onClick={() => onDelete(strategy.id)}
                       disabled={deleteLoading}
-                      className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
                       {deleteLoading ? "Removendo..." : "Remover"}
                     </button>
