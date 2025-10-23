@@ -29,6 +29,9 @@ Guidelines:
 - Never wrap the JSON in markdown or additional text.
 """
 
+_DEFAULT_TEMPERATURE = 0.1
+_NO_TEMPERATURE_MODELS = {"gpt-5-mini"}
+
 
 class SignalParser:
     """Wrapper around OpenAI Responses API to transform raw signals into structured JSON."""
@@ -57,18 +60,37 @@ class SignalParser:
         if not self._client:
             raise RuntimeError("OpenAI API key is not configured.")
 
-        try:
-            response = await self._client.responses.create(
-                model=self._model,
-                input=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": message.strip()},
-                ],
-                temperature=0.1,
-            )
-        except Exception as exc:  # pragma: no cover - depends on external API
-            logger.exception("OpenAI API error while parsing signal.")
-            raise RuntimeError(f"OpenAI request failed: {exc}") from exc
+        request_payload: Dict[str, Any] = {
+            "model": self._model,
+            "input": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": message.strip()},
+            ],
+        }
+        if _DEFAULT_TEMPERATURE is not None and self._model not in _NO_TEMPERATURE_MODELS:
+            request_payload["temperature"] = _DEFAULT_TEMPERATURE
+
+        attempt = 0
+        while True:
+            try:
+                response = await self._client.responses.create(**request_payload)
+                break
+            except Exception as exc:  # pragma: no cover - depends on external API
+                unsupported_temperature = "Unsupported parameter: 'temperature'" in str(exc)
+                if (
+                    attempt == 0
+                    and unsupported_temperature
+                    and "temperature" in request_payload
+                ):
+                    logger.warning(
+                        "Model %s does not support temperature; retrying without it.",
+                        self._model,
+                    )
+                    request_payload.pop("temperature", None)
+                    attempt += 1
+                    continue
+                logger.exception("OpenAI API error while parsing signal.")
+                raise RuntimeError(f"OpenAI request failed: {exc}") from exc
 
         # The Responses API returns a list of outputs; gather concatenated text blocks.
         try:
