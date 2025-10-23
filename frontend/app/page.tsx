@@ -679,9 +679,8 @@ function LoginView({ loading, onLogin }: LoginViewProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl shadow-black/40">
-        <div className="space-y-2 text-center">
+        <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-50">Momentum Admin</h1>
-          <p className="text-sm text-slate-400">Acesse com seu e-mail administrativo para gerenciar o painel.</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
@@ -712,9 +711,6 @@ function LoginView({ loading, onLogin }: LoginViewProps) {
             {loading ? "Autenticando..." : "Entrar"}
           </button>
         </form>
-        <p className="text-center text-xs text-slate-500">
-          Certifique-se de configurar as variáveis ADMIN_EMAIL, ADMIN_PASSWORD e ADMIN_TOKEN_SECRET no servidor antes de publicar.
-        </p>
       </div>
     </div>
   );
@@ -757,8 +753,10 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
           <nav className="flex-1 space-y-6">
             {desktopSections.map(section => (
               <div key={section.title}>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{section.title}</p>
-                <div className="mt-3 space-y-2">
+                {section.title !== "Resumo" && (
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{section.title}</p>
+                )}
+                <div className={section.title !== "Resumo" ? "mt-3 space-y-2" : "space-y-2"}>
                   {section.items.map(item => (
                     <button
                       key={item.id}
@@ -1256,64 +1254,53 @@ function StrategiesTab({
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
-            <h3 className="text-2xl font-semibold text-slate-50">Nova estratégia</h3>
-            <p className="text-xs text-slate-500">Defina um nome e selecione um canal vinculado. A lista é sincronizada automaticamente.</p>
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
+          <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
+        </div>
+
+        <form className="mt-6 space-y-4" onSubmit={handleCreate}>
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
+            <input
+              value={name}
+              onChange={event => setName(event.target.value)}
+              disabled={reachedLimit}
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              placeholder="Ex: Estrategia #1"
+              required
+            />
           </div>
 
-          <form className="mt-6 space-y-4" onSubmit={handleCreate}>
-            <div>
-              <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
-              <input
-                value={name}
-                onChange={event => setName(event.target.value)}
-                disabled={reachedLimit}
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                placeholder="Ex.: GBP Scalper"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-xs uppercase tracking-widest text-slate-400">Canal monitorado</label>
-              <select
-                value={selectedChannel}
-                onChange={event => setSelectedChannel(event.target.value)}
-                className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                required
-                disabled={channelOptions.length === 0 || reachedLimit}
-              >
-                <option value="" disabled>
-                  Selecione um canal
-                </option>
-                {channelOptions.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.title}
-                    {option.username ? ` (@${option.username})` : ""}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-2 text-xs text-slate-500">
-                {channelOptions.length
-                  ? "Escolha um canal listado; a lista é sincronizada automaticamente a cada 10 segundos."
-                  : "Nenhum canal disponível no momento. Aguarde a próxima sincronização automática."}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={creationDisabled}
-              className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Selecionar um canal</label>
+            <select
+              value={selectedChannel}
+              onChange={event => setSelectedChannel(event.target.value)}
+              className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              required
+              disabled={channelOptions.length === 0 || reachedLimit}
             >
-              {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
-            </button>
-            {reachedLimit && (
-              <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>
-            )}
-          </form>
-        </div>
+              <option value="" disabled>
+                Selecione um canal
+              </option>
+              {channelOptions.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.title}
+                  {option.username ? ` (@${option.username})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={creationDisabled}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
+          </button>
+        </form>
       </section>
 
       <section className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
