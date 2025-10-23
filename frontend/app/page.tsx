@@ -831,7 +831,7 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="Estratégias" subtitle="Total configuradas" value={totalStrategies.toString()} accent="blue" />
         <SummaryCard title="Ativas" subtitle="Capturando sinais" value={activeCount.toString()} accent="emerald" />
         <SummaryCard title="Pausadas" subtitle="Aguardando retomada" value={pausedCount.toString()} accent="amber" />
@@ -1037,58 +1037,38 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
   const showMaxEntry = maxEntry !== "NA" && maxEntry !== entry;
 
   const actionColor = action === "BUY" ? "text-blue-300" : action === "SELL" ? "text-red-300" : "text-slate-300";
-  const stopLossIcon = "🛡️";
-  const entryIcon = "🎯";
-  const takeProfitIcon = "💰";
 
   return (
-    <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-5 shadow-lg shadow-black/35">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-4 shadow-lg shadow-black/35">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🚀</span>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
-          </div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
           <div className="flex flex-wrap items-center gap-2 text-lg font-semibold uppercase tracking-tight text-slate-50">
             <span>{symbol}</span>
-            <span className={actionColor}>- {action}</span>
+            <span className="text-slate-500">|</span>
+            <span className={actionColor}>{action}</span>
           </div>
           <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
         </div>
       </header>
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{entryIcon}</span>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada</p>
-              <p className="mt-1 font-semibold text-slate-100">{entry}</p>
-            </div>
-          </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada</p>
+          <p className="mt-1 font-semibold text-slate-100">{entry}</p>
         </div>
         {showMaxEntry && (
-          <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
+          <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
             <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada máx.</p>
             <p className="mt-1 font-semibold text-slate-100">{maxEntry}</p>
           </div>
         )}
-        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{takeProfitIcon}</span>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-slate-500">Take Profit</p>
-              <p className="mt-1 font-semibold text-slate-100">{tpDisplay}</p>
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Take Profit</p>
+          <p className="mt-1 font-semibold text-slate-100">{tpDisplay}</p>
         </div>
-        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">{stopLossIcon}</span>
-            <div>
-              <p className="text-[11px] uppercase tracking-widest text-slate-500">Stop Loss</p>
-              <p className="mt-1 font-semibold text-slate-100">{stopLoss}</p>
-            </div>
-          </div>
+        <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
+          <p className="text-[11px] uppercase tracking-widest text-slate-500">Stop Loss</p>
+          <p className="mt-1 font-semibold text-slate-100">{stopLoss}</p>
         </div>
       </div>
     </div>
@@ -1400,7 +1380,7 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
 
   return (
     <div className="space-y-8">
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {summaryCards.map(card => (
           <SummaryCard key={card.subtitle} title={card.title} subtitle={card.subtitle} value={card.value} accent={card.accent} />
         ))}
