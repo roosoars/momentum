@@ -36,6 +36,9 @@ class TelegramService:
         message_repository: MessageRepository,
         history_limit: int = 200,
     ) -> None:
+        self._api_id = api_id
+        self._api_hash = api_hash
+        self._session_name = session_name
         self._client = TelegramClient(session_name, api_id, api_hash)
         self._messages = message_repository
         self._history_limit = history_limit
@@ -159,8 +162,12 @@ class TelegramService:
 
     async def log_out(self) -> None:
         await self._ensure_connection()
-        if self._client.is_connected():
-            await self._client.log_out()
+        try:
+            if self._client.is_connected():
+                await self._client.log_out()
+                await self._client.disconnect()
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("Failed to log out from Telegram cleanly.")
         self._authorized = False
         self._pending_phone = None
         self._phone_number = None
@@ -173,6 +180,9 @@ class TelegramService:
         self._channel_ids = []
         self._channel_titles = {}
         self._channel_entities = {}
+        self._capture_active = False
+        self._capture_paused = False
+        self._client = TelegramClient(self._session_name, self._api_id, self._api_hash)
         logger.info("Telegram session logged out.")
 
     # ------------------------------------------------------------------ #

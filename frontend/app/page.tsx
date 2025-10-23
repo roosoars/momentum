@@ -396,24 +396,21 @@ export default function DashboardPage() {
     [apiBase]
   );
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(() => {
     if (!token) {
       return;
     }
-    try {
-      await apiFetch("/api/auth/logout", { method: "POST" });
-    } catch (error) {
-      // ignore logout errors, still clear local state
-    } finally {
-      setToken(null);
-      setStrategies([]);
-      setSignalsMap({});
-      setTelegramStatus(null);
-      setChannelConfig(null);
-      setAdminProfile(null);
-      setBanner({ type: "success", message: "Sessão encerrada." });
+    setToken(null);
+    setStrategies([]);
+    setSignalsMap({});
+    setTelegramStatus(null);
+    setChannelConfig(null);
+    setAdminProfile(null);
+    setBanner({ type: "success", message: "Sessão encerrada." });
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
     }
-  }, [apiFetch, token]);
+  }, [token]);
 
 const handleCreateStrategy = useCallback(
   async (name: string, channelIdentifier: string) => {
