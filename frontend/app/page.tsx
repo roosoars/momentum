@@ -1037,18 +1037,19 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
   const showMaxEntry = maxEntry !== "NA" && maxEntry !== entry;
 
   const actionColor = action === "BUY" ? "text-blue-300" : action === "SELL" ? "text-red-300" : "text-slate-300";
+  const processedAt = formatDateTime(signal.processed_at).replace(",", " -");
 
   return (
     <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-4 shadow-lg shadow-black/35">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
-          <div className="flex flex-wrap items-center gap-2 text-lg font-semibold uppercase tracking-tight text-slate-50">
-            <span>{symbol}</span>
-            <span className="text-slate-500">|</span>
-            <span className={actionColor}>{action}</span>
-          </div>
-          <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
+          <p className="text-lg font-semibold uppercase tracking-tight text-slate-50">
+            <span className="text-slate-200">{symbol}</span>
+            <span className="px-2 text-slate-600">|</span>
+            <span className={`${actionColor}`}>{action}</span>
+          </p>
+          <p className="text-xs text-slate-500">{processedAt}</p>
         </div>
       </header>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
