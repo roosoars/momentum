@@ -1347,6 +1347,11 @@ function StrategiesTab({
 
           <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6" onSubmit={handleCreate}>
             <div>
+              <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
+              <h3 className="text-2xl font-semibold text-slate-50">Nova estratégia</h3>
+            </div>
+
+            <div>
               <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
               <input
                 value={name}
