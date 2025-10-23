@@ -691,7 +691,12 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
     title: section.title,
     items: section.items
       .map(id => navMap[id])
-      .filter((item): item is NavItem => Boolean(item) && !item.mobileOnly)
+      .filter((item): item is NavItem => {
+        if (!item) {
+          return false;
+        }
+        return !item.mobileOnly;
+      })
   })).filter(section => section.items.length > 0);
   const mobileNavItems = NAV_ITEMS;
 
