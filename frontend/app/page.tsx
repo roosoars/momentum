@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Dispatch, FormEvent, ReactNode, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 
 type TabKey = "home" | "strategies" | "telegram" | "signals";
 
@@ -186,6 +186,7 @@ export default function DashboardPage() {
   const [channelsLoading, setChannelsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
+  const [signalsPage, setSignalsPage] = useState(0);
   const [strategyInFocus, setStrategyInFocus] = useState<StrategyItem | null>(null);
 
   useEffect(() => {
@@ -407,11 +408,17 @@ export default function DashboardPage() {
     setTelegramStatus(null);
     setChannelConfig(null);
     setAdminProfile(null);
+    setSignalsPage(0);
     setBanner({ type: "success", message: "Sessão encerrada." });
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(STORAGE_KEY);
     }
   }, [token]);
+
+  const handleSelectStrategy = useCallback((id: number | null) => {
+    setSelectedStrategyId(id);
+    setSignalsPage(0);
+  }, [setSelectedStrategyId, setSignalsPage]);
 
 const handleCreateStrategy = useCallback(
   async (name: string, channelIdentifier: string) => {
@@ -566,12 +573,14 @@ const handleCreateStrategy = useCallback(
         <HomeTab
           strategies={strategies}
           selectedStrategyId={selectedStrategyId}
-          onSelectStrategy={setSelectedStrategyId}
+          onSelectStrategy={handleSelectStrategy}
           signals={activeSignals}
           onRefreshSignals={() => (selectedStrategyId ? fetchSignals(selectedStrategyId) : Promise.resolve())}
           loading={actionLoading === "refresh-signals"}
           telegramStatus={telegramStatus}
           captureState={channelConfig?.capture_state ?? telegramStatus?.capture}
+          signalsPage={signalsPage}
+          onChangePage={setSignalsPage}
         />
       )}
       {activeTab === "strategies" && (
@@ -604,10 +613,12 @@ const handleCreateStrategy = useCallback(
         <SignalsTab
           strategies={strategies}
           selectedStrategyId={selectedStrategyId}
-          onSelectStrategy={setSelectedStrategyId}
+          onSelectStrategy={handleSelectStrategy}
           signals={activeSignals}
           onRefreshSignals={() => (selectedStrategyId ? fetchSignals(selectedStrategyId) : Promise.resolve())}
           loading={actionLoading === "refresh-signals"}
+          signalsPage={signalsPage}
+          onChangePage={setSignalsPage}
         />
       )}
     </DashboardLayout>
@@ -808,16 +819,26 @@ type HomeTabProps = {
   loading: boolean;
   telegramStatus: TelegramStatus | null;
   captureState?: TelegramCaptureState | null;
+  signalsPage: number;
+  onChangePage: Dispatch<SetStateAction<number>>;
 };
 
-function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState }: HomeTabProps) {
+function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState, signalsPage, onChangePage }: HomeTabProps) {
   const totalStrategies = strategies.length;
   const activeCount = strategies.filter(item => item.status === "active").length;
   const pausedCount = strategies.filter(item => item.status === "paused").length;
   const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
   const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
   const HOME_SIGNAL_LIMIT = 3;
-  const limitedSignals = sanitisedSignals.slice(0, HOME_SIGNAL_LIMIT);
+  const totalPages = Math.max(1, Math.ceil(sanitisedSignals.length / HOME_SIGNAL_LIMIT));
+  useEffect(() => {
+    if (signalsPage > totalPages - 1) {
+      onChangePage(Math.max(0, totalPages - 1));
+    }
+  }, [signalsPage, totalPages, onChangePage]);
+  const currentPage = Math.min(signalsPage, totalPages - 1);
+  const startIndex = currentPage * HOME_SIGNAL_LIMIT;
+  const paginatedSignals = sanitisedSignals.slice(startIndex, startIndex + HOME_SIGNAL_LIMIT);
 
   const handleSelect = (value: string) => {
     if (!value) {
@@ -884,10 +905,31 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
               Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
             </div>
           ) : (
-            <div className="flex h-full max-h-[380px] flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
-              {limitedSignals.map((signal, index) => (
-                <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - index} />
-              ))}
+            <div className="px-4 py-4">
+              <div className="space-y-3">
+                {paginatedSignals.map((signal, index) => (
+                  <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
+                  <span>Página {currentPage + 1} de {totalPages}</span>
+                  <button
+                    onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
+                    disabled={currentPage === 0}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -909,11 +951,23 @@ type SignalsTabProps = {
   signals: StrategySignal[];
   onRefreshSignals: () => Promise<void>;
   loading: boolean;
+  signalsPage: number;
+  onChangePage: Dispatch<SetStateAction<number>>;
 };
 
-function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading }: SignalsTabProps) {
+function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, signalsPage, onChangePage }: SignalsTabProps) {
   const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
   const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
+  const SIGNALS_PER_PAGE = 3;
+  const totalPages = Math.max(1, Math.ceil(sanitisedSignals.length / SIGNALS_PER_PAGE));
+  useEffect(() => {
+    if (signalsPage > totalPages - 1) {
+      onChangePage(Math.max(0, totalPages - 1));
+    }
+  }, [signalsPage, totalPages, onChangePage]);
+  const currentPage = Math.min(signalsPage, totalPages - 1);
+  const startIndex = currentPage * SIGNALS_PER_PAGE;
+  const paginatedSignals = sanitisedSignals.slice(startIndex, startIndex + SIGNALS_PER_PAGE);
 
   const handleSelect = (value: string) => {
     if (!value) {
@@ -965,10 +1019,31 @@ function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals,
           Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
         </div>
       ) : (
-        <div className="flex flex-1 max-h-[70vh] flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
-          {sanitisedSignals.map((signal, index) => (
-            <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - index} />
-          ))}
+        <div className="flex flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
+          <div className="space-y-3">
+            {paginatedSignals.map((signal, index) => (
+              <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
+            ))}
+          </div>
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
+              <span>Página {currentPage + 1} de {totalPages}</span>
+              <button
+                onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
+                disabled={currentPage === 0}
+                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
+                disabled={currentPage >= totalPages - 1}
+                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                Próxima
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1234,8 +1309,7 @@ function StrategiesTab({
             {limitedStrategies.map(strategy => {
               const appearance = statusAppearance[strategy.status];
               const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
-              const lastSignalDisplay = lastSignalText ? lastSignalText.replace(" ", ", ") : null;
-              const lastSignalDisplayFormatted = lastSignalDisplay ? lastSignalDisplay.replace(",", " -") : null;
+              const lastSignalDisplayFormatted = lastSignalText ? lastSignalText.replace(",", " -") : null;
 
               return (
                 <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
