@@ -1248,27 +1248,14 @@ function StrategiesTab({
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
   const creationDisabled = reachedLimit || actionLoading === "create-strategy" || !canSubmit;
   const limitedStrategies = strategies.slice(0, STRATEGY_LIMIT);
+  const activeStrategiesCount = strategies.filter(item => item.status === "active").length;
+  const availableSlots = Math.max(STRATEGY_LIMIT - strategies.length, 0);
 
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_minmax(0,1fr)]">
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
-              <p className="text-sm text-slate-500">Organize seus sinais nomeando a estratégia e vinculando um canal monitorado.</p>
-            </div>
-            <ul className="space-y-2 text-sm text-slate-400">
-              <li>1. Defina um nome curto e fácil de identificar no painel.</li>
-              <li>2. Selecione um canal disponível na sua conta do Telegram.</li>
-              <li>3. Ative a estratégia quando estiver pronto para receber sinais.</li>
-            </ul>
-            <div className={`rounded-xl border px-4 py-3 text-xs font-semibold uppercase tracking-widest ${reachedLimit ? "border-amber-500/40 bg-amber-500/10 text-amber-200" : "border-slate-800 bg-slate-900/60 text-slate-300"}`}>
-              Limite de {STRATEGY_LIMIT} estratégias simultâneas
-            </div>
-          </div>
-
-          <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-5" onSubmit={handleCreate}>
+        <div className="grid gap-6 lg:grid-cols-2">
+          <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6" onSubmit={handleCreate}>
             <div>
               <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
               <input
@@ -1283,38 +1270,23 @@ function StrategiesTab({
 
             <div>
               <label className="text-xs uppercase tracking-widest text-slate-400">Canal monitorado</label>
-              <div className="mt-1 flex gap-2">
-                <select
-                  value={selectedChannel}
-                  onChange={event => setSelectedChannel(event.target.value)}
-                  className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                  required
-                  disabled={channelOptions.length === 0 || reachedLimit}
-                >
-                  <option value="" disabled>
-                    Selecione um canal
+              <select
+                value={selectedChannel}
+                onChange={event => setSelectedChannel(event.target.value)}
+                className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                required
+                disabled={channelOptions.length === 0 || reachedLimit}
+              >
+                <option value="" disabled>
+                  Selecione um canal
+                </option>
+                {channelOptions.map(option => (
+                  <option key={option.id} value={option.id}>
+                    {option.title}
+                    {option.username ? ` (@${option.username})` : ""}
                   </option>
-                  {channelOptions.map(option => (
-                    <option key={option.id} value={option.id}>
-                      {option.title}
-                      {option.username ? ` (@${option.username})` : ""}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={onRefreshChannels}
-                  disabled={channelsLoading}
-                  className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                >
-                  {channelsLoading ? "..." : "Atualizar"}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                {channelOptions.length
-                  ? "Selecione um canal listado abaixo. Caso não apareça, sincronize novamente com o Telegram."
-                  : "Nenhum canal disponível. Conecte-se ao Telegram e atualize a lista."}
-              </p>
+                ))}
+              </select>
             </div>
 
             <button
@@ -1326,6 +1298,46 @@ function StrategiesTab({
             </button>
             {reachedLimit && <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>}
           </form>
+
+          <div className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
+              <p className="text-xs uppercase tracking-widest text-slate-500">
+                {reachedLimit ? "Limite máximo atingido" : `Vagas disponíveis: ${availableSlots}`}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-500">Canais disponíveis</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-100">
+                  {channelsLoading ? "—" : channelOptions.length}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-500">Estratégias ativas</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-100">{activeStrategiesCount}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={onRefreshChannels}
+                disabled={channelsLoading}
+                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                {channelsLoading ? "Atualizando canais..." : "Atualizar canais"}
+              </button>
+              <button
+                type="button"
+                onClick={onRefresh}
+                className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
+              >
+                Atualizar estratégias
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
