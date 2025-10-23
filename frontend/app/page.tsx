@@ -158,6 +158,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <HomeIcon />
   },
   {
+    id: "signals",
+    label: "Sinais",
+    description: "Últimos alertas",
+    icon: <SignalIcon />
+  },
+  {
     id: "strategies",
     label: "Estratégias",
     description: "Gerencie sinais",
@@ -168,19 +174,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "Telegram",
     description: "Sessão e captura",
     icon: <TelegramIcon />
-  },
-  {
-    id: "signals",
-    label: "Sinais",
-    description: "Últimos alertas",
-    icon: <SignalIcon />,
-    mobileOnly: true
   }
 ];
 
 const NAV_SECTIONS: Array<{ title: string; items: TabKey[] }> = [
   { title: "Resumo", items: ["home"] },
-  { title: "Operações", items: ["strategies"] },
+  { title: "Operações", items: ["signals", "strategies"] },
   { title: "Conexões", items: ["telegram"] }
 ];
 
@@ -909,89 +908,6 @@ function HomeTab({
         <SummaryCard title="Ativas" subtitle="Capturando sinais" value={activeCount.toString()} accent="emerald" />
         <SummaryCard title="Pausadas" subtitle="Aguardando retomada" value={pausedCount.toString()} accent="amber" />
       </section>
-
-      <section className="hidden flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30 md:flex">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-50">Sinais interpretados</h3>
-            <p className="text-sm text-slate-500">Filtre por estratégia para acompanhar as últimas entradas estruturadas pela IA.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedStrategyId ?? ""}
-              onChange={event => handleSelect(event.target.value)}
-              className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            >
-              <option value="" disabled>
-                Selecione uma estratégia
-              </option>
-              {strategies.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} {item.status !== "active" ? `(${item.status})` : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={onRefreshSignals}
-              disabled={!selectedStrategyId || loading}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-            >
-              Atualizar
-            </button>
-            <button
-              onClick={onClearHistory}
-              disabled={clearHistoryLoading}
-              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
-            >
-              {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
-            </button>
-          </div>
-        </div>
-        <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
-          {!selectedStrategy ? (
-            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-              Escolha uma estratégia para visualizar os sinais mais recentes.
-            </div>
-          ) : sanitisedSignals.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-              Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
-            </div>
-          ) : (
-            <div className="px-4 py-4">
-              <div className="space-y-3">
-                {paginatedSignals.map((signal, index) => (
-                  <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
-                  <span>Página {currentPage + 1} de {totalPages}</span>
-                  <button
-                    onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
-                    disabled={currentPage === 0}
-                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
-                    disabled={currentPage >= totalPages - 1}
-                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 text-sm text-slate-400 md:hidden">
-        <h3 className="text-base font-semibold text-slate-100">Sinais interpretados</h3>
-        <p className="mt-2">Acesse a aba “Sinais” na barra inferior para acompanhar os sinais processados em detalhes.</p>
-      </section>
-
     </div>
   );
 }
@@ -1046,78 +962,84 @@ function SignalsTab({
   };
 
   return (
-    <div className="flex min-h-full flex-col gap-4 md:hidden">
-      <header className="space-y-2 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <h2 className="text-lg font-semibold text-slate-50">Sinais interpretados</h2>
-        <p className="text-sm text-slate-500">Selecione uma estratégia para acompanhar as entradas geradas pela IA.</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={selectedStrategyId ?? ""}
-            onChange={event => handleSelect(event.target.value)}
-            className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-          >
-            <option value="" disabled>
-              Selecione uma estratégia
-            </option>
-            {strategies.map(item => (
-              <option key={item.id} value={item.id}>
-                {item.name} {item.status !== "active" ? `(${item.status})` : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={onRefreshSignals}
-            disabled={!selectedStrategyId || loading}
-            className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            Atualizar
-          </button>
-          <button
-            onClick={onClearHistory}
-            disabled={clearHistoryLoading}
-            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
-          >
-            {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
-          </button>
-        </div>
-      </header>
-
-      {!selectedStrategy ? (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
-          Escolha uma estratégia acima para visualizar os sinais mais recentes.
-        </div>
-      ) : sanitisedSignals.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
-          Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
-          <div className="space-y-3">
-            {paginatedSignals.map((signal, index) => (
-              <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
-            ))}
+    <div className="flex min-h-full flex-col gap-4">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-50">Sinais interpretados</h2>
+            <p className="text-sm text-slate-500">Selecione uma estratégia para acompanhar as entradas geradas pela IA.</p>
           </div>
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
-              <span>Página {currentPage + 1} de {totalPages}</span>
-              <button
-                onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
-                disabled={currentPage === 0}
-                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
-                disabled={currentPage >= totalPages - 1}
-                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                Próxima
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedStrategyId ?? ""}
+              onChange={event => handleSelect(event.target.value)}
+              className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <option value="" disabled>
+                Selecione uma estratégia
+              </option>
+              {strategies.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} {item.status !== "active" ? `(${item.status})` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={onRefreshSignals}
+              disabled={!selectedStrategyId || loading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              Atualizar
+            </button>
+            <button
+              onClick={onClearHistory}
+              disabled={clearHistoryLoading}
+              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
+            >
+              {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
+          {!selectedStrategy ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Escolha uma estratégia para visualizar os sinais mais recentes.
+            </div>
+          ) : sanitisedSignals.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
+            </div>
+          ) : (
+            <div className="px-4 py-4">
+              <div className="space-y-3">
+                {paginatedSignals.map((signal, index) => (
+                  <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
+                  <span>Página {currentPage + 1} de {totalPages}</span>
+                  <button
+                    onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
+                    disabled={currentPage === 0}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      </section>
     </div>
   );
 }
