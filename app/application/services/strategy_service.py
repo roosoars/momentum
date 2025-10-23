@@ -264,6 +264,14 @@ class StrategyService:
             channel_ids = sorted(
                 {item.channel_id for item in self._strategies.values() if item.is_active and item.channel_id}
             )
+        if not self._telegram.is_authorized:
+            if channel_ids:
+                logger.warning(
+                    "Telegram session not authorized; deferring channel sync for %s channels.",
+                    len(channel_ids),
+                )
+            await self._telegram.stop_capture()
+            return
         if channel_ids:
             await self._telegram.set_channels(channel_ids, reset_history=False, ingest_history=False)
         else:
