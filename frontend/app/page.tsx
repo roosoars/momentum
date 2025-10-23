@@ -604,8 +604,6 @@ const handleCreateStrategy = useCallback(
           loading={actionLoading === "refresh-signals"}
           telegramStatus={telegramStatus}
           captureState={channelConfig?.capture_state ?? telegramStatus?.capture}
-          captureLoading={captureLoading}
-          onControlCapture={controlCapture}
         />
       )}
       {activeTab === "strategies" && (
@@ -621,20 +619,19 @@ const handleCreateStrategy = useCallback(
           channelOptions={availableChannels}
           onRefreshChannels={fetchAvailableChannels}
           channelsLoading={channelsLoading}
-          captureState={telegramStatus?.capture ?? null}
-          onControlCapture={controlCapture}
-          captureLoading={captureLoading}
         />
       )}
       {activeTab === "telegram" && (
         <TelegramTab
           status={telegramStatus}
-          config={channelConfig}
           actionLoading={actionLoading}
           onRefresh={fetchTelegramSuite}
           onSendCode={sendTelegramCode}
           onVerifyCode={verifyTelegramCode}
           onLogoutTelegram={logoutTelegramSession}
+          onControlCapture={controlCapture}
+          captureState={telegramStatus?.capture ?? null}
+          captureLoading={captureLoading}
         />
       )}
       {activeTab === "signals" && (
@@ -809,11 +806,9 @@ type HomeTabProps = {
   loading: boolean;
   telegramStatus: TelegramStatus | null;
   captureState?: TelegramCaptureState | null;
-  captureLoading: boolean;
-  onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
 };
 
-function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState, captureLoading, onControlCapture }: HomeTabProps) {
+function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, onRefreshSignals, loading, telegramStatus, captureState }: HomeTabProps) {
   const totalStrategies = strategies.length;
   const activeCount = strategies.filter(item => item.status === "active").length;
   const pausedCount = strategies.filter(item => item.status === "paused").length;
@@ -842,31 +837,6 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
           value={captureState?.active ? (captureState.paused ? "Pausada" : "Ativa") : "Desligada"}
           accent={captureState?.active ? (captureState.paused ? "amber" : "emerald") : "slate"}
         />
-      </section>
-
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <h3 className="text-lg font-semibold text-slate-50">Sessão do Telegram</h3>
-        <p className="mt-2 text-sm text-slate-500">Status atualizado da conexão 24/7 com a conta que alimenta as estratégias.</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <p className="text-xs uppercase tracking-widest text-slate-400">Conexão</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">{telegramStatus?.connected ? "Online" : "Offline"}</p>
-            <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Autorização</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">{telegramStatus?.authorized ? "Autorizado" : "Pendente"}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <p className="text-xs uppercase tracking-widest text-slate-400">Usuário</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">
-              {telegramStatus?.account?.username
-                ? `@${telegramStatus.account.username}`
-                : telegramStatus?.account?.display_name ?? "Não identificado"}
-            </p>
-            <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Canais monitorados</p>
-            <p className="mt-2 text-sm font-semibold text-slate-100">
-              {(telegramStatus?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
-            </p>
-          </div>
-        </div>
       </section>
 
       <section className="hidden flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30 md:flex">
@@ -910,8 +880,8 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
             </div>
           ) : (
             <div className="flex h-full flex-col gap-3 overflow-y-auto px-4 py-4 pr-2">
-              {signals.map(signal => (
-                <SignalCard key={signal.id} signal={signal} />
+              {signals.map((signal, index) => (
+                <SignalCard key={signal.id} signal={signal} sequence={index + 1} />
               ))}
             </div>
           )}
@@ -923,24 +893,6 @@ function HomeTab({ strategies, selectedStrategyId, onSelectStrategy, signals, on
         <p className="mt-2">Acesse a aba “Sinais” na barra inferior para acompanhar os sinais processados em detalhes.</p>
       </section>
 
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
-            <p className="text-sm text-slate-500">Controle o listener principal responsável por captar as mensagens dos canais vinculados.</p>
-          </div>
-          <span className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200">
-            {captureState?.active ? (captureState.paused ? "Captura pausada" : "Captura ativa") : "Captura desligada"}
-          </span>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <CaptureButton label="Iniciar" action="start" loading={captureLoading} onAction={onControlCapture} />
-          <CaptureButton label="Pausar" action="pause" loading={captureLoading} onAction={onControlCapture} />
-          <CaptureButton label="Retomar" action="resume" loading={captureLoading} onAction={onControlCapture} />
-          <CaptureButton label="Parar" action="stop" loading={captureLoading} onAction={onControlCapture} />
-          <CaptureButton label="Limpar histórico" action="clear-history" loading={captureLoading} onAction={onControlCapture} />
-        </div>
-      </section>
     </div>
   );
 }
@@ -1008,8 +960,8 @@ function SignalsTab({ strategies, selectedStrategyId, onSelectStrategy, signals,
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-3 overflow-y-auto rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
-          {signals.map(signal => (
-            <SignalCard key={signal.id} signal={signal} />
+          {signals.map((signal, index) => (
+            <SignalCard key={signal.id} signal={signal} sequence={index + 1} />
           ))}
         </div>
       )}
@@ -1043,9 +995,10 @@ function SummaryCard({ title, subtitle, value, accent }: SummaryCardProps) {
 
 type SignalCardProps = {
   signal: StrategySignal;
+  sequence: number;
 };
 
-function SignalCard({ signal }: SignalCardProps) {
+function SignalCard({ signal, sequence }: SignalCardProps) {
   const payload = signal.parsed_payload ?? {};
   const symbol = String(payload.symbol ?? payload.pair ?? "NA").toUpperCase();
   const action = String(payload.action ?? "NA").toUpperCase();
@@ -1058,15 +1011,15 @@ function SignalCard({ signal }: SignalCardProps) {
   return (
     <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4 shadow-md shadow-black/25">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <p className="text-sm font-semibold leading-relaxed text-slate-50">{headline}</p>
+        <div className="space-y-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">SIGNAL #{sequence}</p>
+          <p className="text-sm font-semibold leading-relaxed text-slate-50">{headline}</p>
+        </div>
         <span className="text-xs font-medium text-slate-500 sm:text-right">Processed {formatDateTime(signal.processed_at)}</span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span className={`rounded-md border px-2 py-1 font-semibold ${signal.status === "parsed" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : signal.status === "failed" ? "border-red-500/40 bg-red-500/10 text-red-200" : "border-slate-700 bg-slate-900/70 text-slate-200"}`}>
           STATUS: {signal.status.toUpperCase()}
-        </span>
-        <span className="rounded-md border border-slate-700 bg-slate-900/70 px-2 py-1">
-          Message #{signal.telegram_message_id}
         </span>
       </div>
       {signal.error && (
@@ -1090,9 +1043,6 @@ type StrategiesTabProps = {
   channelOptions: ChannelOption[];
   onRefreshChannels: () => Promise<void>;
   channelsLoading: boolean;
-  captureState: TelegramCaptureState | null;
-  onControlCapture: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
-  captureLoading: boolean;
 };
 
 function StrategiesTab({
@@ -1106,10 +1056,7 @@ function StrategiesTab({
   onRefresh,
   channelOptions,
   onRefreshChannels,
-  channelsLoading,
-  captureState,
-  onControlCapture,
-  captureLoading
+  channelsLoading
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -1333,97 +1280,187 @@ function InlineForm({ label, placeholder, submitLabel, loading, onSubmit }: Inli
 
 type TelegramTabProps = {
   status: TelegramStatus | null;
-  config: ChannelConfig | null;
   actionLoading: string | null;
   onRefresh: () => Promise<void>;
   onSendCode: (phone: string) => Promise<void>;
   onVerifyCode: (code: string) => Promise<void>;
   onLogoutTelegram: () => Promise<void>;
+  onControlCapture: (action: "start" | "stop") => Promise<void>;
+  captureState: TelegramCaptureState | null;
+  captureLoading: boolean;
 };
 
-function TelegramTab({ status, config, actionLoading, onRefresh, onSendCode, onVerifyCode, onLogoutTelegram }: TelegramTabProps) {
+function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCode, onLogoutTelegram, onControlCapture, captureState, captureLoading }: TelegramTabProps) {
+  const [phoneInput, setPhoneInput] = useState("");
+  const [codeInput, setCodeInput] = useState("");
+  const [codeReady, setCodeReady] = useState(false);
+
+  const isAuthorized = Boolean(status?.authorized);
+  const isSendingCode = actionLoading === "telegram-code";
+  const isVerifying = actionLoading === "telegram-verify";
+  const isLoggingOut = actionLoading === "telegram-logout";
+
+  useEffect(() => {
+    const inferredPhone = status?.pending_phone || status?.phone_number || "";
+    setPhoneInput(inferredPhone);
+    setCodeReady(Boolean(status?.pending_phone) && !status?.authorized);
+    if (status?.authorized) {
+      setCodeInput("");
+    }
+  }, [status?.pending_phone, status?.phone_number, status?.authorized]);
+
+  const handleSendCode = async () => {
+    const trimmed = phoneInput.trim();
+    if (!trimmed || isSendingCode) {
+      return;
+    }
+    try {
+      await onSendCode(trimmed);
+      setCodeReady(true);
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    const trimmed = codeInput.trim();
+    if (!trimmed || isVerifying || !codeReady) {
+      return;
+    }
+    try {
+      await onVerifyCode(trimmed);
+      setCodeReady(false);
+      setCodeInput("");
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const captureStatusLabel = captureState?.active
+    ? captureState.paused
+      ? "Captura pausada"
+      : "Captura ativa"
+    : "Captura desligada";
+  const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
+  const stopDisabled = captureLoading || !captureState?.active;
+
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Sessão do Telegram</h3>
-            <p className="text-sm text-slate-500">Autentique-se para permitir que o serviço monitore os canais configurados.</p>
+            <p className="text-sm text-slate-500">Informe o telefone da conta e valide o código recebido pelo Telegram.</p>
           </div>
           <button onClick={onRefresh} className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
             Atualizar status
           </button>
         </div>
+
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <InlineForm
-            label="Enviar código de login"
-            placeholder="+55 11 99999-0000"
-            submitLabel="Enviar"
-            loading={actionLoading === "telegram-code"}
-            onSubmit={value => onSendCode(value)}
-          />
-          <InlineForm
-            label="Validar código"
-            placeholder="12345"
-            submitLabel="Confirmar"
-            loading={actionLoading === "telegram-verify"}
-            onSubmit={value => onVerifyCode(value)}
-          />
-          <div className="flex flex-col gap-2">
-            <label className="text-xs uppercase tracking-widest text-slate-400">Encerrar sessão</label>
-            <button
-              onClick={onLogoutTelegram}
-              className="rounded-lg border border-red-500/40 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100"
-              disabled={actionLoading === "telegram-logout"}
-            >
-              {actionLoading === "telegram-logout" ? "Encerrando..." : "Sair do Telegram"}
-            </button>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <label className="text-xs uppercase tracking-widest text-slate-400">Número de telefone</label>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="tel"
+                value={phoneInput}
+                onChange={event => setPhoneInput(event.target.value)}
+                disabled={isAuthorized || isSendingCode}
+                className="w-full flex-1 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              />
+              <button
+                type="button"
+                onClick={handleSendCode}
+                disabled={isAuthorized || isSendingCode || !phoneInput.trim()}
+                className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                {isSendingCode ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Utilize o formato internacional (ex.: +55 11 99999-0000).</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <label className="text-xs uppercase tracking-widest text-slate-400">Código recebido</label>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="text"
+                value={codeInput}
+                onChange={event => setCodeInput(event.target.value)}
+                disabled={!codeReady || isAuthorized || isVerifying}
+                className="w-full flex-1 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              />
+              <button
+                type="button"
+                onClick={handleVerifyCode}
+                disabled={!codeReady || !codeInput.trim() || isAuthorized || isVerifying}
+                className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                {isVerifying ? "Validando..." : "Confirmar"}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Somente após “Enviar” o campo será liberado para preenchimento.</p>
           </div>
         </div>
+
+        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+          <button
+            type="button"
+            onClick={onLogoutTelegram}
+            disabled={!isAuthorized || isLoggingOut}
+            className="h-14 w-full rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:text-red-50 disabled:border-slate-900 disabled:bg-slate-900/50 disabled:text-slate-500"
+          >
+            {isLoggingOut ? "Encerrando sessão..." : "Encerrar sessão"}
+          </button>
+        </div>
+
         {status && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
               <p className="text-xs uppercase tracking-widest text-slate-400">Conexão</p>
               <p className="mt-2 text-sm font-semibold text-slate-100">{status.connected ? "Online" : "Offline"}</p>
-              <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Autorização</p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <p className="text-xs uppercase tracking-widest text-slate-400">Autorização</p>
               <p className="mt-2 text-sm font-semibold text-slate-100">{status.authorized ? "Autorizado" : "Pendente"}</p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-widest text-slate-400">Usuário</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">
-                {status.account?.username
-                  ? `@${status.account.username}`
-                  : status.account?.display_name ?? "Não identificado"}
-              </p>
-              <p className="mt-4 text-xs uppercase tracking-widest text-slate-400">Canais monitorados</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">
-                {(config?.channels ?? []).map(item => item.title ?? item.id).join(", ") || "Nenhum"}
-              </p>
+              <p className="text-xs uppercase tracking-widest text-slate-400">Captura</p>
+              <p className="mt-2 text-sm font-semibold text-slate-100">{captureStatusLabel}</p>
             </div>
           </div>
         )}
       </section>
+
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
+            <p className="text-sm text-slate-500">Inicie ou finalize o listener responsável por receber as mensagens dos canais selecionados.</p>
+          </div>
+          <span className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200">
+            {captureStatusLabel}
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onControlCapture("start")}
+            disabled={startDisabled}
+            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            Iniciar
+          </button>
+          <button
+            type="button"
+            onClick={() => onControlCapture("stop")}
+            disabled={stopDisabled}
+            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            Parar
+          </button>
+        </div>
+      </section>
     </div>
-  );
-}
-
-type CaptureButtonProps = {
-  label: string;
-  action: "pause" | "resume" | "start" | "stop" | "clear-history";
-  loading: boolean;
-  onAction: (action: "pause" | "resume" | "start" | "stop" | "clear-history") => Promise<void>;
-};
-
-function CaptureButton({ label, action, loading, onAction }: CaptureButtonProps) {
-  const busy = loading;
-  return (
-    <button
-      onClick={() => onAction(action)}
-      disabled={busy}
-      className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-    >
-      {busy ? "Aguarde..." : label}
-    </button>
   );
 }
 
