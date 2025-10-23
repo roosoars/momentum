@@ -212,6 +212,16 @@ export default function DashboardPage() {
   }, [token]);
 
   useEffect(() => {
+    if (!strategyInFocus) {
+      return;
+    }
+    const latest = strategies.find(item => item.id === strategyInFocus.id);
+    if (latest && latest !== strategyInFocus) {
+      setStrategyInFocus(latest);
+    }
+  }, [strategyInFocus, strategies]);
+
+  useEffect(() => {
     if (!banner) {
       return;
     }
@@ -476,6 +486,26 @@ const handleCreateStrategy = useCallback(
     [apiFetch, fetchStrategies]
   );
 
+  const renameStrategy = useCallback(
+    async (strategyId: number, name: string) => {
+      setActionLoading(`${strategyId}-rename`);
+      try {
+        await apiFetch(`/api/strategies/${strategyId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ name })
+        });
+        await fetchStrategies();
+        setBanner({ type: "success", message: "Estratégia atualizada." });
+      } catch (error) {
+        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao renomear." });
+        throw error;
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [apiFetch, fetchStrategies]
+  );
+
   const sendTelegramCode = useCallback(
     async (phone: string) => {
       setActionLoading("telegram-code");
@@ -590,10 +620,13 @@ const handleCreateStrategy = useCallback(
           onCreate={handleCreateStrategy}
           onDelete={deleteStrategy}
           onCommand={runStrategyCommand}
+          onRename={renameStrategy}
           onRefresh={fetchStrategies}
           channelOptions={availableChannels}
           onRefreshChannels={fetchAvailableChannels}
           channelsLoading={channelsLoading}
+          strategyInFocus={strategyInFocus}
+          setStrategyInFocus={setStrategyInFocus}
         />
       )}
       {activeTab === "telegram" && (
@@ -1158,10 +1191,13 @@ type StrategiesTabProps = {
   onCreate: (name: string, channelIdentifier: string) => Promise<void>;
   onDelete: (strategyId: number) => Promise<void>;
   onCommand: (strategyId: number, path: string, successMessage: string) => Promise<void>;
+  onRename: (strategyId: number, name: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   channelOptions: ChannelOption[];
   onRefreshChannels: () => Promise<void>;
   channelsLoading: boolean;
+  strategyInFocus: StrategyItem | null;
+  setStrategyInFocus: Dispatch<SetStateAction<StrategyItem | null>>;
 };
 
 function StrategiesTab({
@@ -1170,10 +1206,13 @@ function StrategiesTab({
   onCreate,
   onDelete,
   onCommand,
+  onRename,
   onRefresh,
   channelOptions,
   onRefreshChannels,
-  channelsLoading
+  channelsLoading,
+  strategyInFocus,
+  setStrategyInFocus
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -1305,7 +1344,7 @@ function StrategiesTab({
             Nenhuma estratégia cadastrada. Utilize o formulário acima para criar a primeira.
           </div>
         ) : (
-          <div className="max-h-[420px] space-y-4 overflow-y-auto pr-1">
+          <div className="space-y-4">
             {limitedStrategies.map(strategy => {
               const appearance = statusAppearance[strategy.status];
               const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
@@ -1325,10 +1364,10 @@ function StrategiesTab({
                   <div className="mt-4 flex justify-end">
                     <button
                       onClick={() => setStrategyInFocus(strategy)}
-                      className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-800 bg-slate-900/60 text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
                     >
                       <span className="text-base">⚙️</span>
-                      Configurar
+                      <span className="sr-only">Configurar estratégia</span>
                     </button>
                   </div>
                 </div>
@@ -1336,7 +1375,156 @@ function StrategiesTab({
             })}
           </div>
         )}
+        {strategyInFocus && (
+          <StrategySettingsModal
+            strategy={strategyInFocus}
+            onClose={() => setStrategyInFocus(null)}
+            onRename={onRename}
+            onCommand={onCommand}
+            onDelete={onDelete}
+            actionLoading={actionLoading}
+          />
+        )}
       </section>
+    </div>
+  );
+}
+
+type StrategySettingsModalProps = {
+  strategy: StrategyItem;
+  onClose: () => void;
+  onRename: (strategyId: number, name: string) => Promise<void>;
+  onCommand: (strategyId: number, path: string, successMessage: string) => Promise<void>;
+  onDelete: (strategyId: number) => Promise<void>;
+  actionLoading: string | null;
+};
+
+function StrategySettingsModal({ strategy, onClose, onRename, onCommand, onDelete, actionLoading }: StrategySettingsModalProps) {
+  const [name, setName] = useState(strategy.name);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pauseAction = strategy.status === "paused" ? "resume" : "pause";
+  const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
+  const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
+  const canActivate = strategy.status === "inactive";
+  const statusLabel = strategy.status === "active" ? "Ativa" : strategy.status === "paused" ? "Pausada" : "Inativa";
+
+  useEffect(() => {
+    setName(strategy.name);
+    setSaved(false);
+    setError(null);
+  }, [strategy.id, strategy.name]);
+
+  const handleSave = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Informe um nome válido.");
+      return;
+    }
+    if (trimmed === strategy.name) {
+      setSaved(true);
+      setError(null);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onRename(strategy.id, trimmed);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao salvar alterações.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCommand = async (path: string, successMessage: string) => {
+    if (!saved) {
+      setError("Salve as alterações antes de continuar.");
+      return;
+    }
+    await onCommand(strategy.id, path, successMessage);
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    if (!saved) {
+      setError("Salve as alterações antes de continuar.");
+      return;
+    }
+    await onDelete(strategy.id);
+    onClose();
+  };
+
+  const activateLoading = actionLoading === `${strategy.id}-activate`;
+  const pauseLoading = actionLoading === `${strategy.id}-${pauseAction}`;
+  const deleteLoading = actionLoading === `${strategy.id}-delete`;
+  const renameLoading = saving || actionLoading === `${strategy.id}-rename`;
+  const disableActions = renameLoading || !saved;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+      <div className="w-full max-w-md space-y-4 rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl shadow-black/50">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-300">Configuração</p>
+            <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {statusLabel}</p>
+          </div>
+          <button onClick={onClose} className="rounded-full border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300">
+            Fechar
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs uppercase tracking-widest text-slate-400">Renomear estratégia</label>
+          <input
+            value={name}
+            onChange={event => {
+              setName(event.target.value);
+              setSaved(false);
+            }}
+            className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+          />
+          <button
+            onClick={handleSave}
+            disabled={renameLoading}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {renameLoading ? "Salvando..." : "Salvar"}
+          </button>
+        </div>
+
+        {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Ações rápidas</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => handleCommand("activate", "Estratégia ativada.")}
+              disabled={disableActions || !canActivate || activateLoading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              {activateLoading ? "Ativando..." : "Ativar"}
+            </button>
+            <button
+              onClick={() => handleCommand(pauseAction, pauseMessage)}
+              disabled={disableActions || strategy.status === "inactive" || pauseLoading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-amber-400/60 hover:text-amber-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              {pauseLoading ? "Aguarde..." : pauseLabel}
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={disableActions || deleteLoading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              {deleteLoading ? "Removendo..." : "Remover"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
