@@ -627,6 +627,9 @@ const handleCreateStrategy = useCallback(
           channelsLoading={channelsLoading}
           strategyInFocus={strategyInFocus}
           setStrategyInFocus={setStrategyInFocus}
+          onControlCapture={controlCapture}
+          captureState={channelConfig?.capture_state ?? telegramStatus?.capture ?? null}
+          captureLoading={captureLoading}
         />
       )}
       {activeTab === "telegram" && (
@@ -1198,6 +1201,9 @@ type StrategiesTabProps = {
   channelsLoading: boolean;
   strategyInFocus: StrategyItem | null;
   setStrategyInFocus: Dispatch<SetStateAction<StrategyItem | null>>;
+  onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
+  captureState: TelegramCaptureState | null;
+  captureLoading: boolean;
 };
 
 function StrategiesTab({
@@ -1212,7 +1218,10 @@ function StrategiesTab({
   onRefreshChannels,
   channelsLoading,
   strategyInFocus,
-  setStrategyInFocus
+  setStrategyInFocus,
+  onControlCapture,
+  captureState,
+  captureLoading
 }: StrategiesTabProps) {
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -1248,13 +1257,55 @@ function StrategiesTab({
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
   const creationDisabled = reachedLimit || actionLoading === "create-strategy" || !canSubmit;
   const limitedStrategies = strategies.slice(0, STRATEGY_LIMIT);
-  const activeStrategiesCount = strategies.filter(item => item.status === "active").length;
-  const availableSlots = Math.max(STRATEGY_LIMIT - strategies.length, 0);
+  const captureStatusLabel = captureState?.active
+    ? captureState.paused
+      ? "Captura pausada"
+      : "Captura ativa"
+    : "Captura desligada";
+  const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
+  const stopDisabled = captureLoading || !captureState?.active;
+  const clearDisabled = captureLoading;
 
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
+            <div className="space-y-2">
+              <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
+              <p className="text-xs text-slate-500">
+                Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.
+              </p>
+            </div>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {captureStatusLabel}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onControlCapture("start")}
+                disabled={startDisabled}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                Iniciar
+              </button>
+              <button
+                type="button"
+                onClick={() => onControlCapture("stop")}
+                disabled={stopDisabled}
+                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                Parar
+              </button>
+              <button
+                type="button"
+                onClick={() => onControlCapture("clear-history")}
+                disabled={clearDisabled}
+                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+              >
+                Limpar histórico
+              </button>
+            </div>
+          </div>
+
           <form className="space-y-4 rounded-2xl border border-slate-900 bg-slate-950/60 p-6" onSubmit={handleCreate}>
             <div>
               <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
@@ -1287,6 +1338,21 @@ function StrategiesTab({
                   </option>
                 ))}
               </select>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  {channelOptions.length
+                    ? "Escolha um canal listado ou atualize para sincronizar novamente."
+                    : "Nenhum canal disponível. Atualize para buscar novos canais."}
+                </p>
+                <button
+                  type="button"
+                  onClick={onRefreshChannels}
+                  disabled={channelsLoading}
+                  className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                >
+                  {channelsLoading ? "Atualizando..." : "Atualizar canais"}
+                </button>
+              </div>
             </div>
 
             <button
@@ -1296,48 +1362,19 @@ function StrategiesTab({
             >
               {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
             </button>
-            {reachedLimit && <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>}
+            {reachedLimit && (
+              <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>
+            )}
+            <div
+              className={`rounded-xl border px-4 py-3 text-xs font-semibold uppercase tracking-widest ${
+                reachedLimit
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  : "border-slate-800 bg-slate-900/60 text-slate-300"
+              }`}
+            >
+              Limite de {STRATEGY_LIMIT} estratégias simultâneas
+            </div>
           </form>
-
-          <div className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-            <div className="space-y-2">
-              <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
-              <p className="text-xs uppercase tracking-widest text-slate-500">
-                {reachedLimit ? "Limite máximo atingido" : `Vagas disponíveis: ${availableSlots}`}
-              </p>
-            </div>
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-slate-500">Canais disponíveis</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-100">
-                  {channelsLoading ? "—" : channelOptions.length}
-                </p>
-              </div>
-              <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4">
-                <p className="text-xs uppercase tracking-widest text-slate-500">Estratégias ativas</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-100">{activeStrategiesCount}</p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={onRefreshChannels}
-                disabled={channelsLoading}
-                className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                {channelsLoading ? "Atualizando canais..." : "Atualizar canais"}
-              </button>
-              <button
-                type="button"
-                onClick={onRefresh}
-                className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
-              >
-                Atualizar estratégias
-              </button>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1604,9 +1641,6 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
       ? "Captura pausada"
       : "Captura ativa"
     : "Captura desligada";
-  const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
-  const stopDisabled = captureLoading || !captureState?.active;
-  const clearDisabled = captureLoading;
 
   const summaryCards = [
     {
@@ -1710,41 +1744,6 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
 
       </section>
 
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="space-y-2">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
-            <p className="text-xs text-slate-500">Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.</p>
-          </div>
-          <p className="text-xs uppercase tracking-widest text-slate-500">Status atual: {captureStatusLabel}</p>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => onControlCapture("start")}
-            disabled={startDisabled}
-            className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            Iniciar
-          </button>
-          <button
-            type="button"
-            onClick={() => onControlCapture("stop")}
-            disabled={stopDisabled}
-            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            Parar
-          </button>
-          <button
-            type="button"
-            onClick={() => onControlCapture("clear-history")}
-            disabled={clearDisabled}
-            className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            Limpar histórico
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
