@@ -1280,9 +1280,6 @@ function StrategiesTab({
   const monitorButtonClass = `${baseButtonClass} hover:border-blue-500/60 hover:text-blue-300`;
   const dangerButtonClass = `${baseButtonClass} hover:border-red-500/60 hover:text-red-300`;
   const [nowTs, setNowTs] = useState(() => Date.now());
-  const [editingStrategyId, setEditingStrategyId] = useState<number | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [renameErrors, setRenameErrors] = useState<Record<number, string | null>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1459,8 +1456,7 @@ function StrategiesTab({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-widest text-slate-500">Estratégias configuradas</p>
-            <h3 className="text-lg font-semibold text-slate-50">Acompanhe e ajuste em tempo real</h3>
-            <p className="text-sm text-slate-500">Gerencie ativação, pausa e remoção diretamente pelos cartões abaixo.</p>
+            <h3 className="text-lg font-semibold text-slate-50">Painel de controle</h3>
           </div>
           <button onClick={onRefresh} className={monitorButtonClass}>
             Atualizar lista
@@ -1471,15 +1467,12 @@ function StrategiesTab({
             Nenhuma estratégia cadastrada. Utilize o formulário ao lado para criar a primeira configuração.
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
             {limitedStrategies.map(strategy => {
               const appearance = statusAppearance[strategy.status];
               const lastSignalAgo = strategy.last_signal
                 ? formatRelativeTime(new Date(strategy.last_signal.processed_at).getTime(), nowTs)
                 : "Sem sinais recentes";
-              const renameActive = editingStrategyId === strategy.id;
-              const renameError = renameErrors[strategy.id] ?? null;
-              const renameBusy = actionLoading === `${strategy.id}-rename`;
               const activateBusy = actionLoading === `${strategy.id}-activate`;
               const pauseAction = strategy.status === "paused" ? "resume" : "pause";
               const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
@@ -1488,116 +1481,50 @@ function StrategiesTab({
               const deleteBusy = actionLoading === `${strategy.id}-delete`;
               const canActivate = strategy.status === "inactive";
               const canPauseOrResume = strategy.status === "active" || strategy.status === "paused";
-              const channelLabel =
-                strategy.channel_title || strategy.channel_identifier || "Não vinculado";
+              const channelLabel = strategy.channel_title || strategy.channel_identifier || "Não vinculado";
               const linkedAgo = strategy.channel_linked_at
                 ? formatRelativeTime(new Date(strategy.channel_linked_at).getTime(), nowTs)
                 : "Sem vínculo";
               const updatedAgo = formatRelativeTime(new Date(strategy.updated_at).getTime(), nowTs);
 
-              const startRename = () => {
-                setEditingStrategyId(strategy.id);
-                setRenameDraft(strategy.name);
-                setRenameErrors(prev => ({ ...prev, [strategy.id]: null }));
-              };
-
-              const cancelRename = () => {
-                setEditingStrategyId(null);
-                setRenameDraft("");
-              };
-
-              const submitRename = async () => {
-                const trimmed = renameDraft.trim();
-                if (!trimmed) {
-                  setRenameErrors(prev => ({ ...prev, [strategy.id]: "Informe um nome válido." }));
-                  return;
-                }
-                setRenameErrors(prev => ({ ...prev, [strategy.id]: null }));
-                try {
-                  await onRename(strategy.id, trimmed);
-                  setEditingStrategyId(null);
-                  setRenameDraft("");
-                } catch (error) {
-                  setRenameErrors(prev => ({
-                    ...prev,
-                    [strategy.id]:
-                      error instanceof Error ? error.message : "Não foi possível renomear a estratégia."
-                  }));
-                }
-              };
-
               return (
                 <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
-                  <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    {renameActive ? (
-                      <div className="w-full space-y-3 sm:max-w-md">
-                        <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
-                        <input
-                          value={renameDraft}
-                          onChange={event => setRenameDraft(event.target.value)}
-                          disabled={renameBusy}
-                          className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:text-slate-500"
-                        />
-                        {renameError && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{renameError}</p>}
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={submitRename} disabled={renameBusy} className={monitorButtonClass}>
-                            {renameBusy ? "Salvando..." : "Salvar"}
-                          </button>
-                          <button type="button" onClick={cancelRename} disabled={renameBusy} className={baseButtonClass}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-widest text-slate-500">
-                          <span>Atualizada {updatedAgo}</span>
-                          <span className="hidden sm:inline-block">•</span>
-                          <span>Último sinal {lastSignalAgo}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={startRename}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-slate-500 transition hover:text-blue-300"
-                        >
-                          Editar nome
-                        </button>
-                      </div>
-                    )}
-                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-4 py-3 text-right text-xs text-slate-400">
-                      <p className="uppercase tracking-widest">Canal vinculado</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-200">{channelLabel}</p>
+                  <header className="flex flex-col gap-2 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-tight text-slate-500">
+                      <span>Atualizada {updatedAgo}</span>
+                      <span className="hidden sm:inline-block">•</span>
+                      <span>Último sinal {lastSignalAgo}</span>
                     </div>
                   </header>
 
-                  <div className="grid gap-2 text-[11px] text-slate-400 sm:grid-cols-3">
-                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
-                      <span className="font-semibold text-slate-200">Canal</span>
-                      <span className="text-right text-slate-400">{channelLabel}</span>
-                    </span>
-                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
-                      <span className="font-semibold text-slate-200">Vinculação</span>
-                      <span className="text-right text-slate-400">{linkedAgo}</span>
-                    </span>
-                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
-                      <span className="font-semibold text-slate-200">Último sinal</span>
-                      <span className="text-right text-slate-400">{lastSignalAgo}</span>
-                    </span>
+                  <div className="grid gap-3 text-center text-[11px] uppercase tracking-tight text-slate-500 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
+                      <p className="text-xs text-slate-500">Canal</p>
+                      <p className="mt-1 text-base font-semibold text-slate-100">{channelLabel}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
+                      <p className="text-xs text-slate-500">Atualizada</p>
+                      <p className="mt-1 text-base font-semibold text-slate-100">{updatedAgo}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-900 bg-slate-900/60 px-3 py-4">
+                      <p className="text-xs text-slate-500">Último sinal</p>
+                      <p className="mt-1 text-base font-semibold text-slate-100">{lastSignalAgo}</p>
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid gap-2 sm:grid-cols-3">
                     {canActivate && (
                       <button
                         type="button"
                         onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
                         disabled={activateBusy}
-                        className={monitorButtonClass}
+                        className={`${monitorButtonClass} w-full`}
                       >
-                        {activateBusy ? "Ativando..." : "Ativar estratégia"}
+                        {activateBusy ? "Ativando..." : "Ativar"}
                       </button>
                     )}
                     {canPauseOrResume && (
@@ -1605,7 +1532,7 @@ function StrategiesTab({
                         type="button"
                         onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
                         disabled={pauseBusy}
-                        className={monitorButtonClass}
+                        className={`${monitorButtonClass} w-full`}
                       >
                         {pauseBusy ? "Processando..." : pauseLabel}
                       </button>
@@ -1614,14 +1541,15 @@ function StrategiesTab({
                       type="button"
                       onClick={() => onDelete(strategy.id)}
                       disabled={deleteBusy}
-                      className={dangerButtonClass}
+                      className={`${dangerButtonClass} w-full`}
                     >
-                      {deleteBusy ? "Removendo..." : "Remover estratégia"}
+                      {deleteBusy ? "Removendo..." : "Remover"}
                     </button>
                   </div>
                 </article>
               );
             })}
+})}
           </div>
         )}
       </section>
