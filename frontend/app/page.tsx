@@ -1332,7 +1332,7 @@ function StrategiesTab({
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
+          <div className="flex flex-col justify-between rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
             <header className="space-y-2">
               <p className="text-xs uppercase tracking-widest text-slate-500">Monitoramento global</p>
               <div className="flex flex-wrap items-center gap-3">
@@ -1349,9 +1349,9 @@ function StrategiesTab({
                   {monitorBadgeLabel}
                 </span>
               </div>
-              <p className="text-xs text-slate-500">
-                Sincronização automática a cada {Math.round(refreshChannelsIntervalMs / 1000)}s.
-                {channelsLoading && <span className="ml-2 text-blue-300">Sincronizando…</span>}
+              <p className="text-xs uppercase tracking-widest text-slate-500">
+                Sincronização automática
+                {channelsLoading && <span className="ml-2 text-blue-300">— sincronizando…</span>}
               </p>
             </header>
 
@@ -1362,11 +1362,9 @@ function StrategiesTab({
                 { label: "Canais em uso", value: linkedChannelsCount },
                 { label: "Estratégias pausadas", value: pausedStrategiesCount }
               ].map(item => (
-                <div key={item.label} className="rounded-xl border border-slate-900 bg-slate-900/50 px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] uppercase tracking-widest text-slate-500">{item.label}</span>
-                    <span className="text-sm font-semibold text-slate-100">{item.value}</span>
-                  </div>
+                <div key={item.label} className="rounded-xl border border-slate-900 bg-slate-900/50 p-4 text-center">
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500">{item.label}</p>
+                  <p className="mt-1 text-2xl font-semibold text-slate-100">{item.value}</p>
                 </div>
               ))}
             </div>
@@ -1576,12 +1574,18 @@ function StrategiesTab({
                     </div>
                   </header>
 
-                  <div className="flex flex-wrap gap-2 text-[11px] text-slate-400">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
-                      <span className="font-semibold text-slate-200">Vinculação</span> {linkedAgo}
+                  <div className="grid gap-2 text-[11px] text-slate-400 sm:grid-cols-3">
+                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+                      <span className="font-semibold text-slate-200">Canal</span>
+                      <span className="text-right text-slate-400">{channelLabel}</span>
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1">
-                      <span className="font-semibold text-slate-200">Último sinal</span> {lastSignalAgo}
+                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+                      <span className="font-semibold text-slate-200">Vinculação</span>
+                      <span className="text-right text-slate-400">{linkedAgo}</span>
+                    </span>
+                    <span className="inline-flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2">
+                      <span className="font-semibold text-slate-200">Último sinal</span>
+                      <span className="text-right text-slate-400">{lastSignalAgo}</span>
                     </span>
                   </div>
 
