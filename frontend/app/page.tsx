@@ -415,22 +415,32 @@ export default function DashboardPage() {
     [apiBase]
   );
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     if (!token) {
       return;
     }
-    setToken(null);
-    setStrategies([]);
-    setSignalsMap({});
-    setTelegramStatus(null);
-    setChannelConfig(null);
-    setAdminProfile(null);
-    setSignalsPage(0);
-    setBanner({ type: "success", message: "Sessão encerrada." });
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
+    setActionLoading("logout");
+    try {
+      // Call backend to delete all strategies and clear history
+      await apiFetch("/api/admin/logout", { method: "POST" });
+    } catch (error) {
+      // Continue with logout even if cleanup fails
+      console.error("Error during logout cleanup:", error);
+    } finally {
+      setActionLoading(null);
+      setToken(null);
+      setStrategies([]);
+      setSignalsMap({});
+      setTelegramStatus(null);
+      setChannelConfig(null);
+      setAdminProfile(null);
+      setSignalsPage(0);
+      setBanner({ type: "success", message: "Sessão encerrada e dados limpos." });
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
     }
-  }, [token]);
+  }, [token, apiFetch]);
 
   const handleSelectStrategy = useCallback((id: number | null) => {
     setSelectedStrategyId(id);
@@ -604,6 +614,7 @@ const handleCreateStrategy = useCallback(
       setActiveTab={setActiveTab}
       onLogout={handleLogout}
       banner={banner}
+      logoutLoading={actionLoading === "logout"}
     >
       {activeTab === "home" && (
         <HomeTab
@@ -721,10 +732,11 @@ type DashboardLayoutProps = {
   setActiveTab: (tab: TabKey) => void;
   onLogout: () => void;
   banner: Banner | null;
+  logoutLoading: boolean;
   children: ReactNode;
 };
 
-function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }: DashboardLayoutProps) {
+function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, logoutLoading, children }: DashboardLayoutProps) {
   const navMap = NAV_ITEMS.reduce<Partial<Record<TabKey, NavItem>>>((acc, item) => {
     acc[item.id] = item;
     return acc;
@@ -786,9 +798,10 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
           </nav>
           <button
             onClick={onLogout}
-            className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+            disabled={logoutLoading}
+            className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sair
+            {logoutLoading ? "Encerrando..." : "Sair"}
           </button>
         </div>
       </aside>
@@ -798,9 +811,10 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
             <span className="text-base font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</span>
             <button
               onClick={onLogout}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+              disabled={logoutLoading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Sair
+              {logoutLoading ? "Encerrando..." : "Sair"}
             </button>
           </div>
         </header>
