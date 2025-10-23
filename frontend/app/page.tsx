@@ -1036,29 +1036,35 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
   const tpDisplay = takeProfit.length ? takeProfit.join(" · ") : "NA";
   const showMaxEntry = maxEntry !== "NA" && maxEntry !== entry;
 
-  const actionStyles =
-    action === "BUY"
-      ? "bg-blue-500/15 text-blue-200 border-blue-500/40"
-      : "bg-red-500/15 text-red-200 border-red-500/40";
-
-  const stopLossIcon = "🛑";
+  const actionColor = action === "BUY" ? "text-blue-300" : action === "SELL" ? "text-red-300" : "text-slate-300";
+  const stopLossIcon = "🛡️";
+  const entryIcon = "🎯";
+  const takeProfitIcon = "💰";
 
   return (
     <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-5 shadow-lg shadow-black/35">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <h4 className="text-2xl font-semibold uppercase tracking-tight text-slate-50">{symbol}</h4>
-            <span className={`rounded-full border px-4 py-1 text-2xl font-semibold uppercase tracking-wide ${actionStyles}`}>{action}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🚀</span>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-lg font-semibold uppercase tracking-tight text-slate-50">
+            <span>{symbol}</span>
+            <span className={actionColor}>- {action}</span>
           </div>
           <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
         </div>
       </header>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
-          <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada</p>
-          <p className="mt-1 font-semibold text-slate-100">{entry}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{entryIcon}</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-slate-500">Entrada</p>
+              <p className="mt-1 font-semibold text-slate-100">{entry}</p>
+            </div>
+          </div>
         </div>
         {showMaxEntry && (
           <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
@@ -1067,8 +1073,13 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
           </div>
         )}
         <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
-          <p className="text-[11px] uppercase tracking-widest text-slate-500">Take Profit</p>
-          <p className="mt-1 font-semibold text-slate-100">{tpDisplay}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{takeProfitIcon}</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-slate-500">Take Profit</p>
+              <p className="mt-1 font-semibold text-slate-100">{tpDisplay}</p>
+            </div>
+          </div>
         </div>
         <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-3 text-sm text-slate-100">
           <div className="flex items-center gap-2">
