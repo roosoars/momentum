@@ -175,7 +175,7 @@ export default function DashboardPage() {
   const [signalsMap, setSignalsMap] = useState<Record<number, StrategySignal[]>>({});
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatus | null>(null);
   const [channelConfig, setChannelConfig] = useState<ChannelConfig | null>(null);
-  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
+  const [, setAdminProfile] = useState<AdminProfile | null>(null);
   const [availableChannels, setAvailableChannels] = useState<ChannelOption[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -444,44 +444,6 @@ const handleCreateStrategy = useCallback(
     [apiFetch, fetchStrategies]
   );
 
-  const updateStrategyName = useCallback(
-    async (strategyId: number, name: string) => {
-      setActionLoading(`${strategyId}-rename`);
-      try {
-        await apiFetch(`/api/strategies/${strategyId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ name })
-        });
-        await fetchStrategies();
-        setBanner({ type: "success", message: "Estratégia atualizada." });
-      } catch (error) {
-        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao renomear." });
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [apiFetch, fetchStrategies]
-  );
-
-  const assignStrategyChannel = useCallback(
-    async (strategyId: number, channelIdentifier: string) => {
-      setActionLoading(`${strategyId}-channel`);
-      try {
-        await apiFetch(`/api/strategies/${strategyId}/channel`, {
-          method: "POST",
-          body: JSON.stringify({ channel_identifier: channelIdentifier })
-        });
-        await fetchStrategies();
-        setBanner({ type: "success", message: "Canal atualizado." });
-      } catch (error) {
-        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao vincular canal." });
-      } finally {
-        setActionLoading(null);
-      }
-    },
-    [apiFetch, fetchStrategies]
-  );
-
   const deleteStrategy = useCallback(
     async (strategyId: number) => {
       setActionLoading(`${strategyId}-delete`);
@@ -592,7 +554,6 @@ const handleCreateStrategy = useCallback(
       setActiveTab={setActiveTab}
       onLogout={handleLogout}
       banner={banner}
-      adminProfile={adminProfile}
     >
       {activeTab === "home" && (
         <HomeTab
@@ -611,8 +572,6 @@ const handleCreateStrategy = useCallback(
           strategies={strategies}
           actionLoading={actionLoading}
           onCreate={handleCreateStrategy}
-          onRename={updateStrategyName}
-          onAssignChannel={assignStrategyChannel}
           onDelete={deleteStrategy}
           onCommand={runStrategyCommand}
           onRefresh={fetchStrategies}
@@ -711,14 +670,12 @@ type DashboardLayoutProps = {
   setActiveTab: (tab: TabKey) => void;
   onLogout: () => void;
   banner: Banner | null;
-  adminProfile: AdminProfile | null;
   children: ReactNode;
 };
 
-function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfile, children }: DashboardLayoutProps) {
+function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }: DashboardLayoutProps) {
   const desktopNavItems = NAV_ITEMS.filter(item => !item.mobileOnly);
   const mobileNavItems = NAV_ITEMS;
-  const currentNav = NAV_ITEMS.find(item => item.id === activeTab);
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
@@ -746,23 +703,25 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
             </button>
           ))}
         </nav>
-        <div className="mt-6 rounded-xl border border-slate-900 bg-slate-900/60 p-4">
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>{adminProfile?.email ?? "Administrador"}</span>
-            <button onClick={onLogout} className="rounded-lg border border-slate-700 px-2 py-1 text-xs font-semibold text-slate-300 transition hover:border-red-500/60 hover:text-red-300">
-              Sair
-            </button>
-          </div>
+        <div className="mt-6 w-full">
+          <button
+            onClick={onLogout}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+          >
+            <span aria-hidden className="text-lg">🚪</span>
+            Sair
+          </button>
         </div>
       </aside>
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-20 border-b border-slate-900 bg-slate-950/80 px-4 py-3 backdrop-blur md:hidden">
           <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs uppercase tracking-widest text-blue-400">Momentum</span>
-              <h1 className="text-lg font-semibold text-slate-50">{currentNav?.label ?? "Painel"}</h1>
-            </div>
-            <button onClick={onLogout} className="rounded-lg border border-slate-800 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300">
+            <span className="text-base font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</span>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+            >
+              <span aria-hidden className="text-sm">🚪</span>
               Sair
             </button>
           </div>
@@ -772,25 +731,36 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, adminProfi
             {banner.message}
           </div>
         )}
-        <main className="flex-1 overflow-y-auto px-4 pb-20 pt-6 md:px-8 md:pb-10 md:pt-8">
+        <main className="flex-1 overflow-y-auto px-4 pb-28 pt-6 md:px-8 md:pb-10 md:pt-8">
           {children}
         </main>
-        <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-900 bg-slate-950/90 backdrop-blur md:hidden">
-          <ul className="flex items-stretch justify-around">
-            {mobileNavItems.map(item => (
-              <li key={item.id}>
-                <button
-                  onClick={() => setActiveTab(item.id)}
-                  className={`flex h-14 flex-col items-center justify-center gap-1 px-4 text-xs transition ${
-                    activeTab === item.id ? "text-blue-300" : "text-slate-400"
-                  }`}
-                >
-                  <span className={`rounded-md border p-1 ${activeTab === item.id ? "border-blue-500/40 bg-blue-500/10" : "border-slate-800 bg-slate-900/60"}`}>{item.icon}</span>
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
+        <nav className="pointer-events-none fixed bottom-4 left-0 right-0 z-30 md:hidden">
+          <div className="pointer-events-auto mx-auto w-full max-w-md px-4">
+            <ul className="flex items-center justify-between rounded-full border border-slate-800 bg-slate-950/80 px-4 py-3 shadow-[0_20px_40px_rgba(0,0,0,0.45)] backdrop-blur">
+              {mobileNavItems.map(item => {
+                const isActive = activeTab === item.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex flex-col items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                        isActive ? "text-blue-300" : "text-slate-400"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-10 w-10 items-center justify-center rounded-full border text-base ${
+                          isActive ? "border-blue-500/40 bg-blue-500/15 text-blue-200" : "border-slate-800 bg-slate-900/70"
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         </nav>
       </div>
     </div>
@@ -1003,27 +973,65 @@ function SignalCard({ signal, sequence }: SignalCardProps) {
   const symbol = String(payload.symbol ?? payload.pair ?? "NA").toUpperCase();
   const action = String(payload.action ?? "NA").toUpperCase();
   const entry = normaliseEntry(payload.entry ?? payload.price ?? "NA");
+  const maxEntry = normaliseEntry(payload.max_entry ?? "NA");
   const takeProfit = normaliseArray(payload.take_profit ?? payload.tp ?? []);
   const stopLoss = normaliseEntry(payload.stop_loss ?? payload.sl ?? "NA");
-  const tpDisplay = takeProfit.length ? takeProfit.join(" / ") : "NA";
-  const headline = `PAIR: ${symbol} | ACTION: ${action} | ENTRY: ${entry} | TP: ${tpDisplay} | SL: ${stopLoss}`;
+  const timeframe = String(payload.timeframe ?? "NA").toUpperCase();
+  const tpDisplay = takeProfit.length ? takeProfit.join(" · ") : "NA";
+
+  const actionAccent =
+    action === "BUY"
+      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 shadow-emerald-500/10"
+      : action === "SELL"
+      ? "border-red-500/30 bg-red-500/10 text-red-200 shadow-red-500/10"
+      : "border-blue-500/30 bg-blue-500/10 text-blue-200 shadow-blue-500/10";
+
+  const actionEmoji = action === "BUY" ? "🚀" : action === "SELL" ? "📉" : "⚙️";
+
+  const statusBadge =
+    signal.status === "parsed"
+      ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+      : signal.status === "failed"
+      ? "border border-red-500/40 bg-red-500/10 text-red-200"
+      : "border border-slate-700 bg-slate-900/70 text-slate-200";
+
+  const detailChips: { label: string; value: string; emoji: string }[] = [
+    { label: "Entrada", value: entry, emoji: "📍" },
+    ...(maxEntry !== "NA" ? [{ label: "Entrada máx.", value: maxEntry, emoji: "🔝" }] : []),
+    { label: "Take Profit", value: tpDisplay, emoji: "🎯" },
+    { label: "Stop Loss", value: stopLoss, emoji: "🛡️" },
+    { label: "Timeframe", value: timeframe, emoji: "⏱️" }
+  ];
 
   return (
-    <div className="rounded-xl border border-slate-900 bg-slate-900/60 p-4 shadow-md shadow-black/25">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">SIGNAL #{sequence}</p>
-          <p className="text-sm font-semibold leading-relaxed text-slate-50">{headline}</p>
+    <div className="rounded-2xl border border-slate-900 bg-slate-900/70 p-5 shadow-lg shadow-black/35">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl shadow-[0_0_30px] ${actionAccent}`}>{actionEmoji}</span>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-300">Sinal #{sequence.toString().padStart(2, "0")}</p>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h4 className="text-xl font-semibold text-slate-50">{symbol}</h4>
+              <span className="text-sm font-semibold uppercase tracking-wide text-slate-300">{action}</span>
+            </div>
+            <p className="text-xs text-slate-500">Processado em {formatDateTime(signal.processed_at)}</p>
+          </div>
         </div>
-        <span className="text-xs font-medium text-slate-500 sm:text-right">Processed {formatDateTime(signal.processed_at)}</span>
+        <span className={`self-start rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${statusBadge}`}>Status: {signal.status.toUpperCase()}</span>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-slate-400">
-        <span className={`rounded-md border px-2 py-1 font-semibold ${signal.status === "parsed" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : signal.status === "failed" ? "border-red-500/40 bg-red-500/10 text-red-200" : "border-slate-700 bg-slate-900/70 text-slate-200"}`}>
-          STATUS: {signal.status.toUpperCase()}
-        </span>
+      <div className="mt-4 grid gap-2 md:grid-cols-3">
+        {detailChips.map(({ label, value, emoji }) => (
+          <div key={label} className="flex items-center gap-3 rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm text-slate-100">
+            <span className="text-lg">{emoji}</span>
+            <div>
+              <p className="text-[11px] uppercase tracking-widest text-slate-500">{label}</p>
+              <p className="font-semibold text-slate-100">{value}</p>
+            </div>
+          </div>
+        ))}
       </div>
       {signal.error && (
-        <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+        <p className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-3 text-xs text-red-200">
           {signal.error}
         </p>
       )}
@@ -1035,8 +1043,6 @@ type StrategiesTabProps = {
   strategies: StrategyItem[];
   actionLoading: string | null;
   onCreate: (name: string, channelIdentifier: string) => Promise<void>;
-  onRename: (strategyId: number, name: string) => Promise<void>;
-  onAssignChannel: (strategyId: number, channelIdentifier: string) => Promise<void>;
   onDelete: (strategyId: number) => Promise<void>;
   onCommand: (strategyId: number, path: string, successMessage: string) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -1049,8 +1055,6 @@ function StrategiesTab({
   strategies,
   actionLoading,
   onCreate,
-  onRename,
-  onAssignChannel,
   onDelete,
   onCommand,
   onRefresh,
@@ -1061,6 +1065,21 @@ function StrategiesTab({
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
 
+  const statusAppearance: Record<StrategyItem["status"], { label: string; badge: string }> = {
+    active: {
+      label: "Ativa",
+      badge: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+    },
+    paused: {
+      label: "Pausada",
+      badge: "border-amber-500/40 bg-amber-500/10 text-amber-200"
+    },
+    inactive: {
+      label: "Inativa",
+      badge: "border-slate-700 bg-slate-900/70 text-slate-300"
+    }
+  };
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedChannel) {
@@ -1069,12 +1088,6 @@ function StrategiesTab({
     await onCreate(name, selectedChannel);
     setName("");
     setSelectedChannel("");
-  };
-
-  const variantForStatus = (status: StrategyItem["status"]) => {
-    if (status === "active") return "text-emerald-300";
-    if (status === "paused") return "text-amber-300";
-    return "text-slate-400";
   };
 
   const canSubmit = Boolean(name.trim()) && Boolean(selectedChannel) && channelOptions.length > 0;
@@ -1100,7 +1113,7 @@ function StrategiesTab({
               <select
                 value={selectedChannel}
                 onChange={event => setSelectedChannel(event.target.value)}
-                className="flex-1 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
                 required
                 disabled={channelOptions.length === 0}
               >
@@ -1157,124 +1170,79 @@ function StrategiesTab({
           </div>
         ) : (
           <div className="space-y-4">
-            {strategies.map(strategy => (
-              <div key={strategy.id} className="rounded-xl border border-slate-900 bg-slate-900/40 p-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
-                      <span className={`text-xs font-semibold uppercase tracking-wide ${variantForStatus(strategy.status)}`}>{strategy.status}</span>
+            {strategies.map(strategy => {
+              const appearance = statusAppearance[strategy.status];
+              const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
+              const lastSignalDisplay = lastSignalText ? lastSignalText.replace(" ", ", ") : null;
+              const createdAtDisplay = formatDateTime(strategy.created_at).replace(" ", ", ");
+              const pauseAction = strategy.status === "paused" ? "resume" : "pause";
+              const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
+              const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
+              const pauseLoading = actionLoading === `${strategy.id}-pause` || actionLoading === `${strategy.id}-resume`;
+              const deleteLoading = actionLoading === `${strategy.id}-delete`;
+              const canActivate = strategy.status === "inactive";
+              const activateDisabled = !canActivate || actionLoading === `${strategy.id}-activate`;
+
+              return (
+                <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h4 className="text-xl font-semibold text-slate-50">{strategy.name}</h4>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
+                      </div>
+                      <div className="flex flex-col gap-1 text-sm text-slate-300">
+                        <span className="flex items-center gap-2">
+                          <span className="text-lg">📡</span>
+                          {strategy.channel_title ?? "Sem título vinculado"}
+                        </span>
+                        <span className="text-xs text-slate-500">{strategy.channel_identifier}</span>
+                      </div>
+                      <p className="text-[11px] uppercase tracking-widest text-slate-500">Criada em {createdAtDisplay}</p>
                     </div>
-                    <p className="text-xs text-slate-500">{strategy.channel_title ?? strategy.channel_identifier}</p>
-                    <p className="text-[11px] text-slate-600">Criada em {formatDateTime(strategy.created_at)}</p>
+                    <div className="flex flex-col items-start gap-2 text-left md:items-end md:text-right">
+                      {strategy.channel_id && (
+                        <div className="rounded-lg border border-slate-800/80 bg-slate-950/50 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-widest text-slate-500">ID do canal</p>
+                          <p className="text-sm font-semibold text-slate-200">{strategy.channel_id}</p>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
+                        <span className="text-lg">🕒</span>
+                        <span>{lastSignalDisplay ? `Último sinal às ${lastSignalDisplay}` : "Sem sinais recentes"}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="mt-4 flex flex-wrap gap-2">
                     <button
                       onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
-                      disabled={actionLoading === `${strategy.id}-activate`}
-                      className="rounded-lg border border-emerald-500/40 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100"
+                      disabled={activateDisabled}
+                      className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:border-emerald-400 hover:text-emerald-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
                       Ativar
                     </button>
                     <button
-                      onClick={() => onCommand(strategy.id, "pause", "Estratégia pausada.")}
-                      disabled={actionLoading === `${strategy.id}-pause`}
-                      className="rounded-lg border border-amber-500/40 px-3 py-1 text-xs font-semibold text-amber-200 transition hover:border-amber-400 hover:text-amber-100"
+                      onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
+                      disabled={strategy.status === "inactive" || pauseLoading}
+                      className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:border-amber-400 hover:text-amber-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
-                      Pausar
-                    </button>
-                    <button
-                      onClick={() => onCommand(strategy.id, "resume", "Estratégia retomada.")}
-                      disabled={actionLoading === `${strategy.id}-resume`}
-                      className="rounded-lg border border-blue-500/40 px-3 py-1 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100"
-                    >
-                      Retomar
-                    </button>
-                    <button
-                      onClick={() => onCommand(strategy.id, "deactivate", "Estratégia desativada.")}
-                      disabled={actionLoading === `${strategy.id}-deactivate`}
-                      className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-300 transition hover:border-slate-500 hover:text-slate-100"
-                    >
-                      Desativar
+                      {pauseLoading ? "..." : pauseLabel}
                     </button>
                     <button
                       onClick={() => onDelete(strategy.id)}
-                      disabled={actionLoading === `${strategy.id}-delete`}
-                      className="rounded-lg border border-red-500/40 px-3 py-1 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100"
+                      disabled={deleteLoading}
+                      className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
                     >
-                      Remover
+                      {deleteLoading ? "Removendo..." : "Remover"}
                     </button>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <InlineForm
-                    label="Alterar nome"
-                    placeholder="Novo nome"
-                    submitLabel="Renomear"
-                    loading={actionLoading === `${strategy.id}-rename`}
-                    onSubmit={value => onRename(strategy.id, value)}
-                  />
-                  <InlineForm
-                    label="Alterar canal"
-                    placeholder="@novo_canal"
-                    submitLabel="Atualizar"
-                    loading={actionLoading === `${strategy.id}-channel`}
-                    onSubmit={value => onAssignChannel(strategy.id, value)}
-                  />
-                  {strategy.last_signal && (
-                    <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-400">
-                      Último sinal às <span className="text-slate-200">{formatDateTime(strategy.last_signal.processed_at)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
     </div>
-  );
-}
-
-type InlineFormProps = {
-  label: string;
-  placeholder: string;
-  submitLabel: string;
-  loading: boolean;
-  onSubmit: (value: string) => Promise<void>;
-};
-
-function InlineForm({ label, placeholder, submitLabel, loading, onSubmit }: InlineFormProps) {
-  const [value, setValue] = useState("");
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!value.trim()) {
-      return;
-    }
-    await onSubmit(value.trim());
-    setValue("");
-  };
-
-  return (
-    <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
-      <label className="text-xs uppercase tracking-widest text-slate-400">{label}</label>
-      <div className="flex gap-2">
-        <input
-          value={value}
-          onChange={event => setValue(event.target.value)}
-          placeholder={placeholder}
-          className="flex-1 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-        >
-          {loading ? "..." : submitLabel}
-        </button>
-      </div>
-    </form>
   );
 }
 
@@ -1285,7 +1253,7 @@ type TelegramTabProps = {
   onSendCode: (phone: string) => Promise<void>;
   onVerifyCode: (code: string) => Promise<void>;
   onLogoutTelegram: () => Promise<void>;
-  onControlCapture: (action: "start" | "stop") => Promise<void>;
+  onControlCapture: (action: "start" | "stop" | "pause" | "resume" | "clear-history") => Promise<void>;
   captureState: TelegramCaptureState | null;
   captureLoading: boolean;
 };
@@ -1343,6 +1311,47 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
     : "Captura desligada";
   const startDisabled = captureLoading || Boolean(captureState?.active && !captureState.paused);
   const stopDisabled = captureLoading || !captureState?.active;
+  const clearDisabled = captureLoading;
+  const toneClasses: Record<"success" | "warning" | "neutral", string> = {
+    success: "border-emerald-500/40 bg-emerald-500/10",
+    warning: "border-amber-500/40 bg-amber-500/10",
+    neutral: "border-slate-800 bg-slate-900/60"
+  };
+  const statusCards: Array<{
+    title: string;
+    value: string;
+    helper: string;
+    tone: "success" | "warning" | "neutral";
+    icon: string;
+  }> = status
+    ? [
+        {
+          title: "Conexão",
+          value: status.connected ? "Online" : "Offline",
+          helper: status.connected ? "Sessão sincronizada" : "Sessão desconectada",
+          tone: status.connected ? "success" : "neutral",
+          icon: "🛰️"
+        },
+        {
+          title: "Autorização",
+          value: status.authorized ? "Autorizada" : "Pendente",
+          helper: status.authorized ? status.account?.display_name ?? "Conta validada" : "Confirme o código recebido",
+          tone: status.authorized ? "success" : "warning",
+          icon: "🔐"
+        },
+        {
+          title: "Captura",
+          value: captureStatusLabel,
+          helper: captureState?.active
+            ? captureState.paused
+              ? "Pausada temporariamente"
+              : "Escutando canais selecionados"
+            : "Listener desligado",
+          tone: captureState?.active ? (captureState.paused ? "warning" : "success") : "neutral",
+          icon: "📡"
+        }
+      ]
+    : [];
 
   return (
     <div className="space-y-8">
@@ -1413,20 +1422,20 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
           </button>
         </div>
 
-        {status && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-widest text-slate-400">Conexão</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">{status.connected ? "Online" : "Offline"}</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-widest text-slate-400">Autorização</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">{status.authorized ? "Autorizado" : "Pendente"}</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-              <p className="text-xs uppercase tracking-widest text-slate-400">Captura</p>
-              <p className="mt-2 text-sm font-semibold text-slate-100">{captureStatusLabel}</p>
-            </div>
+        {statusCards.length > 0 && (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {statusCards.map(card => (
+              <div key={card.title} className={`rounded-2xl border p-5 text-slate-100 shadow-lg shadow-black/30 ${toneClasses[card.tone]}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{card.icon}</span>
+                  <div>
+                    <p className="text-xs uppercase tracking-widest">{card.title}</p>
+                    <p className="mt-1 text-sm font-semibold">{card.value}</p>
+                    <p className="text-[11px] text-slate-200/80">{card.helper}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>
@@ -1435,7 +1444,7 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="text-lg font-semibold text-slate-50">Monitoramento global</h3>
-            <p className="text-sm text-slate-500">Inicie ou finalize o listener responsável por receber as mensagens dos canais selecionados.</p>
+            <p className="text-sm text-slate-500">Inicie, finalize ou limpe o listener responsável por receber as mensagens dos canais selecionados.</p>
           </div>
           <span className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200">
             {captureStatusLabel}
@@ -1457,6 +1466,14 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
             className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
           >
             Parar
+          </button>
+          <button
+            type="button"
+            onClick={() => onControlCapture("clear-history")}
+            disabled={clearDisabled}
+            className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            Limpar histórico
           </button>
         </div>
       </section>
