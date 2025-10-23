@@ -186,6 +186,7 @@ export default function DashboardPage() {
   const [channelsLoading, setChannelsLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
+  const [strategyInFocus, setStrategyInFocus] = useState<StrategyItem | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1234,13 +1235,7 @@ function StrategiesTab({
               const appearance = statusAppearance[strategy.status];
               const lastSignalText = strategy.last_signal ? formatDateTime(strategy.last_signal.processed_at) : null;
               const lastSignalDisplay = lastSignalText ? lastSignalText.replace(" ", ", ") : null;
-              const pauseAction = strategy.status === "paused" ? "resume" : "pause";
-              const pauseLabel = strategy.status === "paused" ? "Retomar" : "Pausar";
-              const pauseMessage = strategy.status === "paused" ? "Estratégia retomada." : "Estratégia pausada.";
-              const pauseLoading = actionLoading === `${strategy.id}-pause` || actionLoading === `${strategy.id}-resume`;
-              const deleteLoading = actionLoading === `${strategy.id}-delete`;
-              const canActivate = strategy.status === "inactive";
-              const activateDisabled = !canActivate || actionLoading === `${strategy.id}-activate`;
+              const lastSignalDisplayFormatted = lastSignalDisplay ? lastSignalDisplay.replace(",", " -") : null;
 
               return (
                 <div key={strategy.id} className="rounded-2xl border border-slate-900 bg-slate-900/50 p-5 shadow-lg shadow-black/30">
@@ -1250,30 +1245,16 @@ function StrategiesTab({
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
                     </div>
                     <p className="text-xs uppercase tracking-widest text-slate-500">
-                      {lastSignalDisplay ? `Último sinal: ${lastSignalDisplay}` : "Sem sinais recentes"}
+                      {lastSignalDisplayFormatted ? `Último sinal: ${lastSignalDisplayFormatted}` : "Sem sinais recentes"}
                     </p>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-4 flex justify-end">
                     <button
-                      onClick={() => onCommand(strategy.id, "activate", "Estratégia ativada.")}
-                      disabled={activateDisabled}
-                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                      onClick={() => setStrategyInFocus(strategy)}
+                      className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
                     >
-                      Ativar
-                    </button>
-                    <button
-                      onClick={() => onCommand(strategy.id, pauseAction, pauseMessage)}
-                      disabled={strategy.status === "inactive" || pauseLoading}
-                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-amber-400/60 hover:text-amber-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                    >
-                      {pauseLoading ? "..." : pauseLabel}
-                    </button>
-                    <button
-                      onClick={() => onDelete(strategy.id)}
-                      disabled={deleteLoading}
-                      className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                    >
-                      {deleteLoading ? "Removendo..." : "Remover"}
+                      <span className="text-base">⚙️</span>
+                      Configurar
                     </button>
                   </div>
                 </div>
