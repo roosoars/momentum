@@ -48,3 +48,19 @@ def get_admin_auth_service(container: ApplicationContainer = Depends(get_contain
 
 def get_stripe_service(container: ApplicationContainer = Depends(get_container)):
     return container.stripe_service
+
+
+def get_user_service(container: ApplicationContainer = Depends(get_container)):
+    return container.user_service
+
+
+def get_subscription_service(container: ApplicationContainer = Depends(get_container)):
+    return container.subscription_service
+
+
+def get_api_key_service(container: ApplicationContainer = Depends(get_container)):
+    return container.api_key_service
+
+
+def get_email_service(container: ApplicationContainer = Depends(get_container)):
+    return container.email_service

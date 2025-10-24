@@ -15,15 +15,23 @@ from ..application.services.auth_service import AuthService
 from ..application.services.channel_service import ChannelService
 from ..application.services.strategy_service import StrategyService
 from ..infrastructure.persistence.sqlite import SQLitePersistence
+from ..infrastructure.repositories.api_key_repository import ApiKeyRepository
+from ..infrastructure.repositories.subscription_repository import SubscriptionRepository
+from ..infrastructure.repositories.user_repository import UserRepository
 from ..presentation.api.routers import admin as admin_router
 from ..presentation.api.routers import auth as auth_router
 from ..presentation.api.routers import config as config_router
 from ..presentation.api.routers import strategies as strategies_router
 from ..presentation.api.routers import stripe_router
+from ..presentation.api.routers import user_router
+from ..services.api_key_service import ApiKeyService
+from ..services.email_service import EmailService
 from ..services.openai_parser import SignalParser
 from ..services.signal_processor import SignalProcessor
 from ..services.stripe_service import StripeService
+from ..services.subscription_service import SubscriptionService
 from ..services.telegram import TelegramService
+from ..services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +54,7 @@ def create_application() -> FastAPI:
     app.include_router(config_router.router)
     app.include_router(strategies_router.router)
     app.include_router(stripe_router.router)
+    app.include_router(user_router.router)
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -92,6 +101,21 @@ def _create_lifespan(settings: Settings):
         )
         stripe_service = StripeService(persistence)
 
+        # User system services
+        user_repository = UserRepository(settings.database_path)
+        subscription_repository = SubscriptionRepository(settings.database_path)
+        api_key_repository = ApiKeyRepository(settings.database_path)
+
+        user_service = UserService(
+            user_repository=user_repository,
+            jwt_secret=settings.admin_token_secret,  # Using same secret for now
+        )
+        subscription_service = SubscriptionService(
+            subscription_repository=subscription_repository,
+        )
+        api_key_service = ApiKeyService(api_key_repository=api_key_repository)
+        email_service = EmailService()
+
         container = ApplicationContainer(
             settings=settings,
             persistence=persistence,
@@ -103,6 +127,10 @@ def _create_lifespan(settings: Settings):
             auth_service=auth_service,
             channel_service=channel_service,
             stripe_service=stripe_service,
+            user_service=user_service,
+            subscription_service=subscription_service,
+            api_key_service=api_key_service,
+            email_service=email_service,
         )
 
         app.state.container = container  # type: ignore[attr-defined]
