@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { API_URL, STORAGE_KEYS } from "@/lib/config";
 
-const STORAGE_KEY = "momentum:user-token";
+const STORAGE_KEY = STORAGE_KEYS.USER_TOKEN;
 
 type ApiKey = {
   id: number;
@@ -22,7 +23,7 @@ export default function ApiKeysPage() {
     const token = localStorage.getItem(STORAGE_KEY);
     if (!token) return;
 
-    const response = await fetch("http://localhost:8000/api/users/api-keys", {
+    const response = await fetch(`${API_URL}/api/users/api-keys`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await response.json();
@@ -39,7 +40,7 @@ export default function ApiKeysPage() {
 
     try {
       const token = localStorage.getItem(STORAGE_KEY);
-      const response = await fetch("http://localhost:8000/api/users/api-keys", {
+      const response = await fetch(`${API_URL}/api/users/api-keys`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -59,7 +60,7 @@ export default function ApiKeysPage() {
 
   const deleteKey = async (id: number) => {
     const token = localStorage.getItem(STORAGE_KEY);
-    await fetch(`http://localhost:8000/api/users/api-keys/${id}`, {
+    await fetch(`${API_URL}/api/users/api-keys/${id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

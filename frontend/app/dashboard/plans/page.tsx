@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { API_URL, STORAGE_KEYS } from "@/lib/config";
 
-const STORAGE_KEY = "momentum:user-token";
+const STORAGE_KEY = STORAGE_KEYS.USER_TOKEN;
 
 type Plan = {
   product_id: string;
@@ -24,7 +25,7 @@ export default function PlansPage() {
   useEffect(() => {
     (async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/users/subscription/plans");
+        const response = await fetch(`${API_URL}/api/users/subscription/plans`);
         const data = await response.json();
         setPlans(data);
       } finally {
@@ -38,7 +39,7 @@ export default function PlansPage() {
     if (!token) return;
 
     try {
-      const response = await fetch("http://localhost:8000/api/users/subscription/checkout", {
+      const response = await fetch(`${API_URL}/api/users/subscription/checkout`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

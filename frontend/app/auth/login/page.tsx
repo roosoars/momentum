@@ -3,15 +3,16 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-
-const STORAGE_KEY = "momentum:user-token";
+import { API_URL, STORAGE_KEYS } from "@/lib/config";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -19,7 +20,7 @@ export default function LoginPage() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8000/api/users/login", {
+      const response = await fetch(`${API_URL}/api/users/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -31,9 +32,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      localStorage.setItem(STORAGE_KEY, data.access_token);
-
-      // Redirect to dashboard
+      localStorage.setItem(STORAGE_KEYS.USER_TOKEN, data.access_token);
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -42,13 +41,41 @@ export default function LoginPage() {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!email) {
+      setError("Digite seu email primeiro");
+      return;
+    }
+
+    setResending(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/api/users/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || "Failed to resend");
+      }
+
+      setMessage("Email de verificação enviado! Verifique sua caixa de entrada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao reenviar email");
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-50">
-            Momentum
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-50">Momentum</h1>
           <p className="mt-2 text-sm text-slate-400">Entre na sua conta</p>
         </div>
 
@@ -58,11 +85,15 @@ export default function LoginPage() {
           </div>
         )}
 
+        {message && (
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            {message}
+          </div>
+        )}
+
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              E-mail
-            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">E-mail</label>
             <input
               type="email"
               value={email}
@@ -73,9 +104,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Senha
-            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Senha</label>
             <input
               type="password"
               value={password}
@@ -93,6 +122,16 @@ export default function LoginPage() {
             {loading ? "Entrando..." : "Entrar"}
           </button>
         </form>
+
+        <div className="text-center">
+          <button
+            onClick={handleResendVerification}
+            disabled={resending}
+            className="text-xs text-slate-400 hover:text-slate-300 disabled:text-slate-600"
+          >
+            {resending ? "Reenviando..." : "Não recebeu o email de verificação? Reenviar"}
+          </button>
+        </div>
 
         <div className="text-center text-sm text-slate-400">
           Não tem uma conta?{" "}

@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { STORAGE_KEYS } from "@/lib/config";
 
-const STORAGE_KEY = "momentum:user-token";
+const STORAGE_KEY = STORAGE_KEYS.USER_TOKEN;
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();

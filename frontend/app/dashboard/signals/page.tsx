@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "momentum:user-token";
+import { API_URL, STORAGE_KEYS } from "@/lib/config";
 
 type Signal = {
   id: number;
@@ -16,6 +15,13 @@ export default function SignalsPage() {
   const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const savedKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
+    if (savedKey) {
+      setApiKey(savedKey);
+    }
+  }, []);
+
   const fetchSignals = async () => {
     if (!apiKey) {
       alert("Configure uma API key primeiro na página de API Keys");
@@ -24,7 +30,7 @@ export default function SignalsPage() {
 
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/api/signals?limit=50", {
+      const response = await fetch(`${API_URL}/api/signals?limit=50`, {
         headers: { "X-API-Key": apiKey },
       });
 
@@ -35,6 +41,9 @@ export default function SignalsPage() {
 
       const data = await response.json();
       setSignals(data.items);
+
+      // Save API key for next time
+      localStorage.setItem(STORAGE_KEYS.API_KEY, apiKey);
     } finally {
       setLoading(false);
     }
@@ -62,6 +71,9 @@ export default function SignalsPage() {
             {loading ? "Carregando..." : "Buscar Sinais"}
           </button>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Sua API key será salva automaticamente neste navegador
+        </p>
       </div>
 
       <div className="space-y-3">
