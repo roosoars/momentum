@@ -902,7 +902,9 @@ const handleCreateStrategy = useCallback(
           products={stripeProducts}
           subscriptions={stripeSubscriptions}
           actionLoading={actionLoading}
-          onRefresh={() => Promise.all([fetchStripeProducts(), fetchStripeSubscriptions()])}
+          onRefresh={async () => {
+            await Promise.all([fetchStripeProducts(), fetchStripeSubscriptions()]);
+          }}
           apiFetch={apiFetch}
           setBanner={setBanner}
         />
