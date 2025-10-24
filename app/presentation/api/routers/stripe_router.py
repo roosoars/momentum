@@ -327,9 +327,74 @@ async def create_test_subscription(
 async def stripe_webhook(
     request: Request,
     stripe_service: StripeService = Depends(get_stripe_service),
+    subscription_service: "SubscriptionService" = Depends(lambda: None),  # Will be injected
 ) -> Dict[str, str]:
     """Handle Stripe webhook events."""
-    # This endpoint doesn't require auth - Stripe signs the requests
-    # We'll implement webhook verification in the future
-    # For now, just return accepted
-    return {"status": "received"}
+    from app.core.dependencies import get_subscription_service
+
+    # Get subscription service
+    if subscription_service is None:
+        container = getattr(request.app.state, "container", None)
+        if container:
+            subscription_service = container.subscription_service
+
+    if not subscription_service:
+        return {"status": "error", "message": "subscription service not available"}
+
+    try:
+        # Get the webhook payload
+        payload = await request.body()
+        sig_header = request.headers.get("stripe-signature", "")
+
+        # Get webhook secret from settings
+        webhook_secret = stripe_service.persistence.get_setting("stripe_webhook_secret")
+
+        if not webhook_secret:
+            # If no webhook secret configured, just log the event
+            import json
+            event_data = json.loads(payload)
+            print(f"[STRIPE WEBHOOK] Event received: {event_data.get('type')}")
+            return {"status": "received"}
+
+        # Verify webhook signature
+        import stripe
+        try:
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, webhook_secret
+            )
+        except stripe.error.SignatureVerificationError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid signature",
+            )
+
+        event_type = event["type"]
+        event_data = event["data"]["object"]
+
+        # Handle different event types
+        if event_type == "checkout.session.completed":
+            # Payment successful, subscription created
+            subscription_service.handle_checkout_completed(event_data)
+
+        elif event_type == "customer.subscription.updated":
+            # Subscription updated (status change, etc.)
+            subscription_service.handle_subscription_updated(event_data)
+
+        elif event_type == "customer.subscription.deleted":
+            # Subscription canceled
+            subscription_service.handle_subscription_deleted(event_data)
+
+        elif event_type == "invoice.payment_failed":
+            # Payment failed - subscription may be past_due
+            subscription_id = event_data.get("subscription")
+            if subscription_id:
+                # Fetch subscription and update status
+                stripe_sub = stripe.Subscription.retrieve(subscription_id)
+                subscription_service.handle_subscription_updated(stripe_sub)
+
+        return {"status": "success"}
+
+    except Exception as e:
+        print(f"[STRIPE WEBHOOK ERROR] {str(e)}")
+        # Return 200 to avoid Stripe retrying
+        return {"status": "error", "message": str(e)}

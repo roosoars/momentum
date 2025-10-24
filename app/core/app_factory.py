@@ -21,9 +21,12 @@ from ..infrastructure.repositories.user_repository import UserRepository
 from ..presentation.api.routers import admin as admin_router
 from ..presentation.api.routers import auth as auth_router
 from ..presentation.api.routers import config as config_router
+from ..presentation.api.routers import public_signals_router
 from ..presentation.api.routers import strategies as strategies_router
 from ..presentation.api.routers import stripe_router
+from ..presentation.api.routers import user_api_keys_router
 from ..presentation.api.routers import user_router
+from ..presentation.api.routers import user_subscription_router
 from ..services.api_key_service import ApiKeyService
 from ..services.email_service import EmailService
 from ..services.openai_parser import SignalParser
@@ -55,6 +58,9 @@ def create_application() -> FastAPI:
     app.include_router(strategies_router.router)
     app.include_router(stripe_router.router)
     app.include_router(user_router.router)
+    app.include_router(user_subscription_router.router)
+    app.include_router(user_api_keys_router.router)
+    app.include_router(public_signals_router.router)
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -110,8 +116,18 @@ def _create_lifespan(settings: Settings):
             user_repository=user_repository,
             jwt_secret=settings.admin_token_secret,  # Using same secret for now
         )
+
+        # Get Stripe secret key for subscription service
+        stripe_mode = persistence.get_setting("stripe_mode") or "test"
+        stripe_secret = None
+        if stripe_mode == "test":
+            stripe_secret = persistence.get_setting("stripe_test_secret_key")
+        else:
+            stripe_secret = persistence.get_setting("stripe_prod_secret_key")
+
         subscription_service = SubscriptionService(
             subscription_repository=subscription_repository,
+            stripe_secret_key=stripe_secret,
         )
         api_key_service = ApiKeyService(api_key_repository=api_key_repository)
         email_service = EmailService()

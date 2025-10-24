@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.dependencies import (
     get_email_service,
+    get_subscription_service,
     get_user_service,
 )
 from app.domain.models.user import User
@@ -186,13 +187,11 @@ async def resend_verification(
 @router.get("/me", response_model=UserProfileResponse)
 async def get_profile(
     user: User = Depends(get_current_user),
-    subscription_service: SubscriptionService = Depends(lambda: None),  # Will be injected properly
+    subscription_service: SubscriptionService = Depends(get_subscription_service),
 ) -> UserProfileResponse:
     """Get current user profile."""
     # Check if user has active subscription
-    has_active_subscription = False
-    if subscription_service:
-        has_active_subscription = subscription_service.has_active_subscription(user.id)
+    has_active_subscription = subscription_service.has_active_subscription(user.id)
 
     return UserProfileResponse(
         id=user.id,
