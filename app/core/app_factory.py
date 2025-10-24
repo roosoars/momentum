@@ -19,8 +19,10 @@ from ..presentation.api.routers import admin as admin_router
 from ..presentation.api.routers import auth as auth_router
 from ..presentation.api.routers import config as config_router
 from ..presentation.api.routers import strategies as strategies_router
+from ..presentation.api.routers import stripe_router
 from ..services.openai_parser import SignalParser
 from ..services.signal_processor import SignalProcessor
+from ..services.stripe_service import StripeService
 from ..services.telegram import TelegramService
 
 logger = logging.getLogger(__name__)
@@ -43,6 +45,7 @@ def create_application() -> FastAPI:
     app.include_router(auth_router.router)
     app.include_router(config_router.router)
     app.include_router(strategies_router.router)
+    app.include_router(stripe_router.router)
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -87,6 +90,7 @@ def _create_lifespan(settings: Settings):
             persistence,
             persistence,
         )
+        stripe_service = StripeService(persistence)
 
         container = ApplicationContainer(
             settings=settings,
@@ -98,6 +102,7 @@ def _create_lifespan(settings: Settings):
             admin_auth_service=admin_auth_service,
             auth_service=auth_service,
             channel_service=channel_service,
+            stripe_service=stripe_service,
         )
 
         app.state.container = container  # type: ignore[attr-defined]

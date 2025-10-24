@@ -2,7 +2,7 @@
 
 import { Dispatch, FormEvent, ReactNode, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 
-type TabKey = "home" | "strategies" | "telegram" | "signals";
+type TabKey = "home" | "strategies" | "telegram" | "signals" | "stripe";
 
 type Banner = {
   type: "success" | "error";
@@ -82,6 +82,15 @@ type ChannelOption = {
   type?: string | null;
 };
 
+type StripeConfig = {
+  mode: string;
+  test_configured: boolean;
+  production_configured: boolean;
+  test_publishable_key: string | null;
+  production_publishable_key: string | null;
+  connected: boolean;
+};
+
 type NavItem = {
   id: TabKey;
   label: string;
@@ -150,6 +159,12 @@ const SignalIcon = () => (
   </svg>
 );
 
+const CreditCardIcon = () => (
+  <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+    <path d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const NAV_ITEMS: NavItem[] = [
   {
     id: "home",
@@ -174,13 +189,19 @@ const NAV_ITEMS: NavItem[] = [
     label: "Telegram",
     description: "Sessão e captura",
     icon: <TelegramIcon />
+  },
+  {
+    id: "stripe",
+    label: "Stripe",
+    description: "Pagamentos",
+    icon: <CreditCardIcon />
   }
 ];
 
 const NAV_SECTIONS: Array<{ title: string; items: TabKey[] }> = [
   { title: "Resumo", items: ["home"] },
   { title: "Operações", items: ["signals", "strategies"] },
-  { title: "Conexões", items: ["telegram"] }
+  { title: "Conexões", items: ["telegram", "stripe"] }
 ];
 
 export default function DashboardPage() {
@@ -205,6 +226,7 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
   const [signalsPage, setSignalsPage] = useState(0);
+  const [stripeConfig, setStripeConfig] = useState<StripeConfig | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -306,6 +328,16 @@ export default function DashboardPage() {
     setChannelConfig(config);
   }, [apiFetch]);
 
+  const fetchStripeConfig = useCallback(async () => {
+    try {
+      const config = await apiFetch<StripeConfig>("/api/stripe/config");
+      setStripeConfig(config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao carregar configuração Stripe.";
+      setBanner({ type: "error", message });
+    }
+  }, [apiFetch]);
+
   const fetchAvailableChannels = useCallback(async () => {
     setChannelsLoading(true);
     try {
@@ -343,11 +375,12 @@ export default function DashboardPage() {
       setSelectedStrategyId(null);
       setAvailableChannels([]);
       setChannelsLoading(false);
+      setStripeConfig(null);
       return;
     }
     (async () => {
       try {
-        await Promise.all([fetchProfile(), fetchStrategies(), fetchTelegramSuite(), fetchAvailableChannels()]);
+        await Promise.all([fetchProfile(), fetchStrategies(), fetchTelegramSuite(), fetchAvailableChannels(), fetchStripeConfig()]);
       } catch (error) {
         if (error instanceof Error && error.message.includes("Sessão expirada")) {
           return;
@@ -355,7 +388,7 @@ export default function DashboardPage() {
         setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao carregar dados." });
       }
     })();
-  }, [token, fetchProfile, fetchStrategies, fetchTelegramSuite, fetchAvailableChannels]);
+  }, [token, fetchProfile, fetchStrategies, fetchTelegramSuite, fetchAvailableChannels, fetchStripeConfig]);
 
   useEffect(() => {
     if (!selectedStrategyId) {
@@ -593,6 +626,54 @@ const handleCreateStrategy = useCallback(
     [apiFetch, fetchTelegramSuite, setSignalsMap]
   );
 
+  const configureStripe = useCallback(
+    async (
+      mode: string,
+      testSecretKey: string,
+      testPublishableKey: string,
+      prodSecretKey: string,
+      prodPublishableKey: string
+    ) => {
+      setActionLoading("stripe-config");
+      try {
+        await apiFetch("/api/stripe/config", {
+          method: "POST",
+          body: JSON.stringify({
+            mode,
+            test_secret_key: testSecretKey,
+            test_publishable_key: testPublishableKey,
+            prod_secret_key: prodSecretKey,
+            prod_publishable_key: prodPublishableKey,
+          }),
+        });
+        await fetchStripeConfig();
+        setBanner({ type: "success", message: "Stripe configurado com sucesso." });
+      } catch (error) {
+        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao configurar Stripe." });
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [apiFetch, fetchStripeConfig]
+  );
+
+  const testStripeSubscription = useCallback(async () => {
+    setActionLoading("stripe-test");
+    try {
+      const result = await apiFetch<{ success: boolean; message: string }>("/api/stripe/test-subscription", {
+        method: "POST",
+      });
+      setBanner({ type: "success", message: result.message || "Assinatura de teste criada com sucesso." });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao criar assinatura de teste.";
+      setBanner({ type: "error", message });
+      throw error;
+    } finally {
+      setActionLoading(null);
+    }
+  }, [apiFetch]);
+
   const activeStrategy = useMemo(() => strategies.find(item => item.id === selectedStrategyId), [strategies, selectedStrategyId]);
   const activeSignals = selectedStrategyId ? signalsMap[selectedStrategyId] ?? [] : [];
 
@@ -653,6 +734,15 @@ const handleCreateStrategy = useCallback(
           onSendCode={sendTelegramCode}
           onVerifyCode={verifyTelegramCode}
           onLogoutTelegram={logoutTelegramSession}
+        />
+      )}
+      {activeTab === "stripe" && (
+        <StripeTab
+          config={stripeConfig}
+          actionLoading={actionLoading}
+          onConfigure={configureStripe}
+          onRefresh={fetchStripeConfig}
+          onTestSubscription={testStripeSubscription}
         />
       )}
       {activeTab === "signals" && (
@@ -1527,6 +1617,195 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
 
       </section>
 
+    </div>
+  );
+}
+
+type StripeTabProps = {
+  config: StripeConfig | null;
+  actionLoading: string | null;
+  onConfigure: (mode: string, testSecretKey: string, testPublishableKey: string, prodSecretKey: string, prodPublishableKey: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onTestSubscription: () => Promise<unknown>;
+};
+
+function StripeTab({ config, actionLoading, onConfigure, onRefresh, onTestSubscription }: StripeTabProps) {
+  const [mode, setMode] = useState<string>("test");
+  const [testSecretKey, setTestSecretKey] = useState("");
+  const [testPublishableKey, setTestPublishableKey] = useState("");
+  const [prodSecretKey, setProdSecretKey] = useState("");
+  const [prodPublishableKey, setProdPublishableKey] = useState("");
+
+  const isConfiguring = actionLoading === "stripe-config";
+  const isTesting = actionLoading === "stripe-test";
+
+  useEffect(() => {
+    if (config) {
+      setMode(config.mode);
+    }
+  }, [config]);
+
+  const handleConfigure = async () => {
+    if (isConfiguring) {
+      return;
+    }
+    try {
+      await onConfigure(mode, testSecretKey, testPublishableKey, prodSecretKey, prodPublishableKey);
+      setTestSecretKey("");
+      setTestPublishableKey("");
+      setProdSecretKey("");
+      setProdPublishableKey("");
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const handleTestSubscription = async () => {
+    if (isTesting) {
+      return;
+    }
+    try {
+      await onTestSubscription();
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const currentMode = config?.mode || "test";
+  const isTestMode = currentMode === "test";
+  const testConfigured = config?.test_configured || false;
+  const prodConfigured = config?.production_configured || false;
+  const connected = config?.connected || false;
+
+  return (
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Configuração Stripe</h3>
+            <p className="text-sm text-slate-500">Configure suas chaves de API para pagamentos e assinaturas.</p>
+          </div>
+          <button onClick={onRefresh} className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
+            Atualizar status
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-semibold text-slate-300">Modo:</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode("test")}
+                className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
+                  mode === "test"
+                    ? "border-blue-500/40 bg-blue-500/10 text-blue-200"
+                    : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                Test
+              </button>
+              <button
+                onClick={() => setMode("production")}
+                className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
+                  mode === "production"
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                    : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                Production
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Test Mode Keys</h4>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Secret Key</label>
+                <input
+                  type="password"
+                  value={testSecretKey}
+                  onChange={event => setTestSecretKey(event.target.value)}
+                  placeholder="sk_test_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Publishable Key</label>
+                <input
+                  type="text"
+                  value={testPublishableKey}
+                  onChange={event => setTestPublishableKey(event.target.value)}
+                  placeholder="pk_test_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div className={`rounded-lg border px-3 py-2 text-xs ${testConfigured ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-900/60 text-slate-500"}`}>
+                {testConfigured ? "✓ Configurado" : "Não configurado"}
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Production Mode Keys</h4>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Secret Key</label>
+                <input
+                  type="password"
+                  value={prodSecretKey}
+                  onChange={event => setProdSecretKey(event.target.value)}
+                  placeholder="sk_live_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Publishable Key</label>
+                <input
+                  type="text"
+                  value={prodPublishableKey}
+                  onChange={event => setProdPublishableKey(event.target.value)}
+                  placeholder="pk_live_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div className={`rounded-lg border px-3 py-2 text-xs ${prodConfigured ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-900/60 text-slate-500"}`}>
+                {prodConfigured ? "✓ Configurado" : "Não configurado"}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleConfigure}
+            disabled={isConfiguring}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {isConfiguring ? "Salvando..." : "Salvar Configuração"}
+          </button>
+
+          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-300">Status da Conexão</p>
+              <p className="text-xs text-slate-500">Modo atual: {isTestMode ? "Test" : "Production"}</p>
+            </div>
+            <div className={`rounded-full px-4 py-2 text-xs font-semibold uppercase ${connected ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border border-red-500/40 bg-red-500/10 text-red-200"}`}>
+              {connected ? "Conectado" : "Desconectado"}
+            </div>
+          </div>
+
+          {isTestMode && connected && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+              <h4 className="text-sm font-semibold text-amber-300">Testar Assinatura</h4>
+              <p className="mt-1 text-xs text-slate-400">Crie uma assinatura de teste para verificar a integração.</p>
+              <button
+                onClick={handleTestSubscription}
+                disabled={isTesting}
+                className="mt-3 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-200 transition hover:border-amber-400 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isTesting ? "Criando..." : "Criar Assinatura de Teste"}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

@@ -44,3 +44,7 @@ def get_signal_parser(container: ApplicationContainer = Depends(get_container)):
 
 def get_admin_auth_service(container: ApplicationContainer = Depends(get_container)):
     return container.admin_auth_service
+
+
+def get_stripe_service(container: ApplicationContainer = Depends(get_container)):
+    return container.stripe_service

@@ -8,6 +8,7 @@ from .config import Settings
 from ..domain.ports.persistence import PersistenceGateway
 from ..services.openai_parser import SignalParser
 from ..services.signal_processor import SignalProcessor
+from ..services.stripe_service import StripeService
 from ..services.telegram import TelegramService
 
 
@@ -24,3 +25,4 @@ class ApplicationContainer:
     admin_auth_service: AdminAuthService
     auth_service: AuthService
     channel_service: ChannelService
+    stripe_service: StripeService
