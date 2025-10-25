@@ -15,13 +15,15 @@ class UserRepository:
         self._initialize_table()
 
     def _initialize_table(self) -> None:
-        """Create users table if it doesn't exist."""
+        """Create users table if it doesn't exist and migrate schema if needed."""
         with sqlite3.connect(self.db_path) as conn:
+            # Create table if it doesn't exist
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     email TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
+                    is_active INTEGER DEFAULT 1,
                     is_verified INTEGER DEFAULT 0,
                     verification_token TEXT,
                     verification_expires_at TEXT,
@@ -29,6 +31,28 @@ class UserRepository:
                     updated_at TEXT NOT NULL
                 )
             """)
+
+            # Migrate existing table: check and add missing columns
+            cursor = conn.execute("PRAGMA table_info(users)")
+            existing_columns = {row[1] for row in cursor.fetchall()}
+
+            # Add is_active if missing (for admin compatibility)
+            if "is_active" not in existing_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1")
+
+            # Add is_verified if missing (for email verification)
+            if "is_verified" not in existing_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0")
+
+            # Add verification_token if missing
+            if "verification_token" not in existing_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN verification_token TEXT")
+
+            # Add verification_expires_at if missing
+            if "verification_expires_at" not in existing_columns:
+                conn.execute("ALTER TABLE users ADD COLUMN verification_expires_at TEXT")
+
+            # Create indexes
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"
             )
@@ -54,10 +78,10 @@ class UserRepository:
             cursor = conn.execute(
                 """
                 INSERT INTO users (
-                    email, password_hash, is_verified, verification_token,
+                    email, password_hash, is_active, is_verified, verification_token,
                     verification_expires_at, created_at, updated_at
                 )
-                VALUES (?, ?, 0, ?, ?, ?, ?)
+                VALUES (?, ?, 1, 0, ?, ?, ?, ?)
                 """,
                 (
                     email,
@@ -75,6 +99,7 @@ class UserRepository:
             id=user_id,
             email=email,
             password_hash=password_hash,
+            is_active=True,
             is_verified=False,
             verification_token=verification_token,
             verification_expires_at=verification_expires_at,
@@ -184,6 +209,7 @@ class UserRepository:
             id=row["id"],
             email=row["email"],
             password_hash=row["password_hash"],
+            is_active=bool(row["is_active"]),
             is_verified=bool(row["is_verified"]),
             verification_token=row["verification_token"],
             verification_expires_at=verification_exp,
