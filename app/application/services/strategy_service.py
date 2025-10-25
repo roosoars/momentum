@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 class StrategyService:
     """Coordinates strategy lifecycle, channel subscriptions, and signal parsing."""
 
-    MAX_ACTIVE_STRATEGIES = 5
+    MAX_STRATEGIES = 2
+    MAX_ACTIVE_STRATEGIES = 2
 
     def __init__(
         self,
@@ -88,8 +89,10 @@ class StrategyService:
         linked_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
         async with self._lock:
+            if len(self._strategies) >= self.MAX_STRATEGIES:
+                raise ValueError("Limite de estratégias atingido. Remova uma estratégia existente para criar uma nova.")
             if activate and self._count_active_locked() >= self.MAX_ACTIVE_STRATEGIES:
-                raise ValueError("Limite de cinco estratégias ativas atingido.")
+                raise ValueError("Limite de estratégias ativas atingido.")
             strategy = self._persistence.create_strategy(
                 name=clean_name,
                 channel_identifier=clean_identifier,
@@ -155,7 +158,7 @@ class StrategyService:
             if strategy.is_active and not strategy.is_paused:
                 return strategy
             if not strategy.is_active and self._count_active_locked() >= self.MAX_ACTIVE_STRATEGIES:
-                raise ValueError("Limite de cinco estratégias ativas atingido.")
+                raise ValueError("Limite de estratégias ativas atingido.")
             updated = self._persistence.update_strategy(strategy.id, is_active=True, is_paused=False)
             self._store_strategy_locked(updated)
         await self._synchronise_channels()
@@ -190,7 +193,7 @@ class StrategyService:
             if not strategy.is_paused:
                 return strategy
             if self._count_active_locked() >= self.MAX_ACTIVE_STRATEGIES:
-                raise ValueError("Limite de cinco estratégias ativas atingido.")
+                raise ValueError("Limite de estratégias ativas atingido.")
             updated = self._persistence.update_strategy(strategy.id, is_paused=False)
             self._store_strategy_locked(updated)
         logger.info("Strategy %s resumed", strategy_id)

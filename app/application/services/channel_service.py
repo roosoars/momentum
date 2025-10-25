@@ -6,7 +6,6 @@ from ...domain.ports.persistence import (
     SettingsRepository,
     StrategySignalRepository,
 )
-from ...services.message_stream import MessageStreamManager
 from ...services.telegram import TelegramService
 
 
@@ -19,13 +18,11 @@ class ChannelService:
         settings_repository: SettingsRepository,
         message_repository: MessageRepository,
         signal_repository: StrategySignalRepository,
-        stream_manager: MessageStreamManager,
     ) -> None:
         self._telegram = telegram_service
         self._settings = settings_repository
         self._messages = message_repository
         self._signals = signal_repository
-        self._stream_manager = stream_manager
 
     def current_configuration(self) -> Dict[str, Any]:
         channels = self._load_channels()
@@ -113,7 +110,6 @@ class ChannelService:
             canonical_id = str(channel_id)
             self._messages.clear_messages_for_channel(canonical_id)
             self._signals.clear_signals_for_channel(canonical_id)
-        await self._stream_manager.broadcast_history([])
 
     def _load_channels(self) -> List[Dict[str, Any]]:
         raw = self._settings.get_setting("channels")

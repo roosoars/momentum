@@ -1,15 +1,14 @@
 # Momentum – Trading Signal Orchestrator
 
-Momentum é um conjunto de serviços para ingestão de sinais do Telegram, normalização com OpenAI e exposição via painel administrativo. O backend (FastAPI) captura mensagens em tempo real, processa-as em uma fila assíncrona e armazena apenas os sinais estruturados dos últimos 24 h. O frontend (Next.js 14) oferece um painel responsivo com navegação estilo painel no desktop e tab bar no mobile.
+Momentum é um conjunto de serviços para ingestão de sinais do Telegram, normalização com OpenAI e exposição via painel administrativo. O backend (FastAPI) captura mensagens em tempo real, processa-as em uma fila assíncrona e armazena apenas os sinais estruturados dos últimos 24 h. O frontend (Next.js 14) oferece um painel responsivo com navegação estilo painel no desktop e tab bar no mobile.
 
 ## Principais recursos
 
-- **Estratégias nomeadas (até 5 ativas)**: vincule cada estratégia a um canal Telegram e controle ativar/pausar/inativar individualmente.
+- **Estratégias nomeadas (até 2 ativas)**: vincule cada estratégia a um canal Telegram e controle ativar/pausar/inativar individualmente.
 - **Parsing com OpenAI**: mensagens recém-recebidas são transformadas em JSON padronizado (`symbol`, `action`, `entry`, `take_profit`, `stop_loss`…).
-- **Fila assíncrona resiliente**: impede sobrecarga da API da OpenAI e aplica retenção automática de 24 h para sinais processados.
+- **Fila assíncrona resiliente**: impede sobrecarga da API da OpenAI e aplica retenção automática de 24 h para sinais processados.
 - **Autenticação administrativa**: painel protegido com JWT (e-mail/senha). É possível cadastrar novos administradores autenticados.
 - **Gestão completa do Telegram**: login com código + 2FA, controle de captura (start/pause/stop) e visualização de status.
-- **Streaming opcional**: WebSocket `/ws/messages` permanece disponível para integradores que precisem do feed bruto.
 
 ## Requisitos
 
@@ -35,7 +34,7 @@ Crie um `.env` na raiz (o backend lê automaticamente com `python-dotenv`). Prin
 | `SIGNAL_RETENTION_HOURS` | | Horas a manter sinais processados (default 24) |
 | `SIGNAL_WORKERS` | | Workers da fila de parsing (default 2) |
 | `ADMIN_TOKEN_SECRET` | ✓ | Segredo JWT para autenticação administrativa |
-| `ADMIN_TOKEN_EXP_MINUTES` | | Expiração do token (default 1440 ≈ 24 h) |
+| `ADMIN_TOKEN_EXP_MINUTES` | | Expiração do token (default 1440 ≈ 24 h) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | | Se informados, cria o administrador inicial no primeiro boot |
 | `CORS_ALLOW_ORIGINS` | | Lista separada por vírgula de origens autorizadas |
 
@@ -57,7 +56,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-A API REST fica em `http://localhost:8000`, WebSocket em `ws://localhost:8000/ws/messages`.
+A API REST fica em `http://localhost:8000`.
 
 ### Frontend
 
@@ -80,9 +79,9 @@ Painel disponível em `http://localhost:3000`.
 
 1. Autentique-se e abra a aba **Estratégias**.
 2. Informe nome e canal (`@username`, ID numérico ou link `https://t.me/...`).
-3. Ao ativar (máx. 5 simultâneas), o backend mantém o canal em escuta e envia novas mensagens para a fila de parsing.
+3. Ao ativar (máx. 2 simultâneas), o backend mantém o canal em escuta e envia novas mensagens para a fila de parsing.
 4. O parser solicita ao modelo da OpenAI o JSON padronizado. Sucessos são salvos com `status=parsed`; falhas permanecem registradas com `status=failed` e o erro retornado.
-5. A aba **Painel** permite selecionar uma estratégia e visualizar os sinais processados (os mais recentes dentro das últimas 24 h).
+5. A aba **Sinais** permite selecionar uma estratégia e visualizar os sinais processados (os mais recentes dentro das últimas 24 h).
 
 Sinais com mais de `SIGNAL_RETENTION_HOURS` são limpos automaticamente após cada processamento para manter o banco enxuto.
 
@@ -112,21 +111,18 @@ Sinais com mais de `SIGNAL_RETENTION_HOURS` são limpos automaticamente após ca
 ### Configuração legacy *(requer token)*
 - `GET /api/config`
 - `POST /api/config/channel` `{ channels: ["@canal"], reset_history }`
+- `GET /api/config/channels/available`
 - `POST /api/config/capture/(start|stop|pause|resume|clear-history)`
-
-### Mensagens brutas
-- `GET /api/messages?limit=200&channel_id=` *(para depuração)*
-- `WS /ws/messages` *(histórico + eventos `message`/`signal`)*
 
 ## Estrutura do projeto
 
 ```
 app/
-  application/      # Casos de uso (Auth, Channel, Strategy, Message)
+  application/      # Casos de uso (Auth, Channel, Strategy)
   core/             # Configuração, container, logging
   domain/           # Modelos e portas (interfaces)
   infrastructure/   # Persistência SQLite
-  presentation/     # Routers FastAPI e WebSocket
+  presentation/     # Routers FastAPI
   services/         # Integrações (Telegram, OpenAI parser, fila)
 frontend/
   app/              # Next.js App Router, layout e páginas
@@ -135,10 +131,9 @@ frontend/
 
 ## Observações
 
-- A fila (`SignalProcessor`) aceita novos listeners – por padrão, os sinais processados também são emitidos via WebSocket (`type: "signal"`).
 - Se `OPENAI_API_KEY` não estiver configurada ou o modelo retornar erro, o registro é mantido com `status="failed"` e o campo `error` preenchido.
 - Mensagens históricas antigas não são reprocessadas automaticamente; apenas sinais recebidos após a vinculação do canal (timestamp ≥ `channel_linked_at`) entram na fila.
-- Sempre persista o diretório `state/` (sessão Telegram) e `data/` (SQLite) em produção.
+- Sempre persista os volumes Docker `app-data` (SQLite) e `telegram-session` (sessão Telegram) em produção.
 
 ## Licença
 

@@ -10,8 +10,8 @@ services:
     environment:
       TELEGRAM_SESSION_NAME: /app/state/telegram_session
     volumes:
-      - ./data:/app/data
-      - ./state:/app/state
+      - app-data:/app/data
+      - telegram-session:/app/state
     ports:
       - "127.0.0.1:8000:8000"
 
@@ -47,5 +47,7 @@ services:
       - caddy_config:/config
 
 volumes:
+  app-data:
+  telegram-session:
   caddy_data:
   caddy_config:
