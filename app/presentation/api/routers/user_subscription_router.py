@@ -4,7 +4,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.config import Settings
 from app.core.dependencies import (
+    get_settings,
     get_stripe_service,
     get_subscription_service,
 )
@@ -29,9 +31,14 @@ async def get_plans(
 ) -> List[PlanResponse]:
     """Get available subscription plans."""
     try:
+        # Check if Stripe is configured
+        if not stripe_service.is_connected():
+            # Return empty list if Stripe not configured
+            return []
+
         # Get all products with prices from Stripe
-        products_data = stripe_service.list_products()
-        products = products_data.get("items", [])
+        # list_products() returns a list directly, not a dict
+        products = stripe_service.list_products()
 
         plans = []
         for product in products:
@@ -78,11 +85,11 @@ async def create_checkout_session(
     request: CreateCheckoutSessionRequest,
     user: User = Depends(require_verified_user),
     subscription_service: SubscriptionService = Depends(get_subscription_service),
+    settings: Settings = Depends(get_settings),
 ) -> CreateCheckoutSessionResponse:
     """Create a Stripe checkout session for subscription."""
     try:
-        # TODO: Get base URL from environment
-        base_url = "http://localhost:3000"
+        base_url = settings.frontend_base_url
         success_url = f"{base_url}/dashboard?subscription=success"
         cancel_url = f"{base_url}/dashboard/plans?subscription=canceled"
 
