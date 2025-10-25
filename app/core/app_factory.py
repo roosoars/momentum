@@ -13,19 +13,28 @@ from .logging import configure_logging
 from ..application.services.admin_auth_service import AdminAuthService
 from ..application.services.auth_service import AuthService
 from ..application.services.channel_service import ChannelService
-from ..application.services.message_service import MessageQueryService
 from ..application.services.strategy_service import StrategyService
 from ..infrastructure.persistence.sqlite import SQLitePersistence
+from ..infrastructure.repositories.api_key_repository import ApiKeyRepository
+from ..infrastructure.repositories.subscription_repository import SubscriptionRepository
+from ..infrastructure.repositories.user_repository import UserRepository
 from ..presentation.api.routers import admin as admin_router
 from ..presentation.api.routers import auth as auth_router
 from ..presentation.api.routers import config as config_router
-from ..presentation.api.routers import messages as messages_router
+from ..presentation.api.routers import public_signals_router
 from ..presentation.api.routers import strategies as strategies_router
-from ..presentation.websocket import routes as websocket_routes
-from ..services.message_stream import MessageStreamManager
+from ..presentation.api.routers import stripe_router
+from ..presentation.api.routers import user_api_keys_router
+from ..presentation.api.routers import user_router
+from ..presentation.api.routers import user_subscription_router
+from ..services.api_key_service import ApiKeyService
+from ..services.email_service import EmailService
 from ..services.openai_parser import SignalParser
 from ..services.signal_processor import SignalProcessor
+from ..services.stripe_service import StripeService
+from ..services.subscription_service import SubscriptionService
 from ..services.telegram import TelegramService
+from ..services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +47,7 @@ def create_application() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allow_origins,
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -46,9 +55,12 @@ def create_application() -> FastAPI:
     app.include_router(admin_router.router)
     app.include_router(auth_router.router)
     app.include_router(config_router.router)
-    app.include_router(messages_router.router)
     app.include_router(strategies_router.router)
-    app.include_router(websocket_routes.router)
+    app.include_router(stripe_router.router)
+    app.include_router(user_router.router)
+    app.include_router(user_subscription_router.router)
+    app.include_router(user_api_keys_router.router)
+    app.include_router(public_signals_router.router)
 
     @app.get("/health")
     async def health() -> Dict[str, Any]:
@@ -70,14 +82,12 @@ def _create_lifespan(settings: Settings):
             message_repository=persistence,
             history_limit=settings.initial_history_limit,
         )
-        stream_manager = MessageStreamManager()
         signal_parser = SignalParser(settings.openai_api_key, settings.openai_model)
         signal_processor = SignalProcessor(
             persistence,
             signal_parser,
             retention_hours=settings.signal_retention_hours,
             max_workers=settings.signal_worker_count,
-            callback=stream_manager.broadcast_signal,
         )
         strategy_service = StrategyService(persistence, telegram, signal_processor)
         admin_auth_service = AdminAuthService(
@@ -94,29 +104,55 @@ def _create_lifespan(settings: Settings):
             persistence,
             persistence,
             persistence,
-            stream_manager,
         )
-        message_service = MessageQueryService(persistence)
+        stripe_service = StripeService(persistence)
+
+        # User system services
+        user_repository = UserRepository(settings.database_path)
+        subscription_repository = SubscriptionRepository(settings.database_path)
+        api_key_repository = ApiKeyRepository(settings.database_path)
+
+        user_service = UserService(
+            user_repository=user_repository,
+            jwt_secret=settings.admin_token_secret,  # Using same secret for now
+        )
+
+        # Get Stripe secret key for subscription service
+        stripe_mode = persistence.get_setting("stripe_mode") or "test"
+        stripe_secret = None
+        if stripe_mode == "test":
+            stripe_secret = persistence.get_setting("stripe_test_secret_key")
+        else:
+            stripe_secret = persistence.get_setting("stripe_prod_secret_key")
+
+        subscription_service = SubscriptionService(
+            subscription_repository=subscription_repository,
+            stripe_secret_key=stripe_secret,
+        )
+        api_key_service = ApiKeyService(api_key_repository=api_key_repository)
+        email_service = EmailService()
 
         container = ApplicationContainer(
             settings=settings,
             persistence=persistence,
             telegram_service=telegram,
-            stream_manager=stream_manager,
             signal_parser=signal_parser,
             signal_processor=signal_processor,
             strategy_service=strategy_service,
             admin_auth_service=admin_auth_service,
             auth_service=auth_service,
             channel_service=channel_service,
-            message_service=message_service,
+            stripe_service=stripe_service,
+            user_service=user_service,
+            subscription_service=subscription_service,
+            api_key_service=api_key_service,
+            email_service=email_service,
         )
 
         app.state.container = container  # type: ignore[attr-defined]
 
         await signal_processor.start()
         await telegram.start()
-        telegram.add_listener(stream_manager.broadcast_new_message)
         telegram.add_listener(strategy_service.handle_incoming_message)
 
         await strategy_service.initialize()
@@ -137,7 +173,6 @@ def _create_lifespan(settings: Settings):
         try:
             yield
         finally:
-            telegram.remove_listener(stream_manager.broadcast_new_message)
             telegram.remove_listener(strategy_service.handle_incoming_message)
             await signal_processor.stop()
             await telegram.stop()

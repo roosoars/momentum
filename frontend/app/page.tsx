@@ -2,7 +2,7 @@
 
 import { Dispatch, FormEvent, ReactNode, SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 
-type TabKey = "home" | "strategies" | "telegram" | "signals";
+type TabKey = "home" | "strategies" | "telegram" | "signals" | "stripe" | "produtos" | "clientes";
 
 type Banner = {
   type: "success" | "error";
@@ -82,6 +82,79 @@ type ChannelOption = {
   type?: string | null;
 };
 
+type StripeConfig = {
+  mode: string;
+  test_configured: boolean;
+  production_configured: boolean;
+  test_publishable_key: string | null;
+  production_publishable_key: string | null;
+  connected: boolean;
+  webhook_configured: boolean;
+};
+
+type StripeMetrics = {
+  mrr: number;
+  total_subscriptions: number;
+  new_subscriptions_30d: number;
+  canceled_subscriptions_30d: number;
+  churn_rate_30d: number;
+  total_customers: number;
+  subscriptions_by_status: {
+    active: number;
+    trialing: number;
+    past_due: number;
+    canceled: number;
+    incomplete: number;
+  };
+};
+
+type StripeProduct = {
+  id: string;
+  name: string;
+  description: string | null;
+  active: boolean;
+  created: number;
+  prices: StripePrice[];
+};
+
+type StripePrice = {
+  id: string;
+  active: boolean;
+  amount: number | null;
+  currency: string;
+  type: string;
+  recurring: {
+    interval: string;
+    interval_count: number;
+  } | null;
+};
+
+type StripeSubscription = {
+  id: string;
+  customer_id: string;
+  customer_email: string | null;
+  status: string;
+  current_period_start: number;
+  current_period_end: number;
+  cancel_at_period_end: boolean;
+  created: number;
+  items: {
+    price_id: string;
+    product_id: string;
+    amount: number | null;
+    currency: string;
+  }[];
+};
+
+type StripeCustomer = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  created: number;
+  balance: number;
+  currency: string | null;
+};
+
 type NavItem = {
   id: TabKey;
   label: string;
@@ -150,12 +223,48 @@ const SignalIcon = () => (
   </svg>
 );
 
+const CreditCardIcon = () => (
+  <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+    <path d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const ShoppingBagIcon = () => (
+  <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+    <path d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const UsersIcon = () => (
+  <svg aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+    <path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const NAV_ITEMS: NavItem[] = [
   {
     id: "home",
     label: "Painel",
-    description: "Resumo operacional",
+    description: "Métricas e resumo",
     icon: <HomeIcon />
+  },
+  {
+    id: "produtos",
+    label: "Produtos",
+    description: "Preços e assinaturas",
+    icon: <ShoppingBagIcon />
+  },
+  {
+    id: "clientes",
+    label: "Clientes",
+    description: "Gerenciar clientes",
+    icon: <UsersIcon />
+  },
+  {
+    id: "signals",
+    label: "Sinais",
+    description: "Últimos alertas",
+    icon: <SignalIcon />
   },
   {
     id: "strategies",
@@ -170,18 +279,19 @@ const NAV_ITEMS: NavItem[] = [
     icon: <TelegramIcon />
   },
   {
-    id: "signals",
-    label: "Sinais",
-    description: "Últimos alertas",
-    icon: <SignalIcon />,
-    mobileOnly: true
+    id: "stripe",
+    label: "Stripe",
+    description: "Configuração",
+    icon: <CreditCardIcon />
   }
 ];
 
 const NAV_SECTIONS: Array<{ title: string; items: TabKey[] }> = [
   { title: "Resumo", items: ["home"] },
-  { title: "Operações", items: ["strategies"] },
-  { title: "Conexões", items: ["telegram"] }
+  { title: "Produtos", items: ["produtos"] },
+  { title: "Clientes", items: ["clientes"] },
+  { title: "Operações", items: ["signals", "strategies"] },
+  { title: "Conexões", items: ["telegram", "stripe"] }
 ];
 
 export default function DashboardPage() {
@@ -206,6 +316,11 @@ export default function DashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [initialised, setInitialised] = useState(false);
   const [signalsPage, setSignalsPage] = useState(0);
+  const [stripeConfig, setStripeConfig] = useState<StripeConfig | null>(null);
+  const [stripeMetrics, setStripeMetrics] = useState<StripeMetrics | null>(null);
+  const [stripeProducts, setStripeProducts] = useState<StripeProduct[]>([]);
+  const [stripeSubscriptions, setStripeSubscriptions] = useState<StripeSubscription[]>([]);
+  const [stripeCustomers, setStripeCustomers] = useState<StripeCustomer[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -307,6 +422,53 @@ export default function DashboardPage() {
     setChannelConfig(config);
   }, [apiFetch]);
 
+  const fetchStripeConfig = useCallback(async () => {
+    try {
+      const config = await apiFetch<StripeConfig>("/api/stripe/config");
+      setStripeConfig(config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao carregar configuração Stripe.";
+      setBanner({ type: "error", message });
+    }
+  }, [apiFetch]);
+
+  const fetchStripeMetrics = useCallback(async () => {
+    try {
+      const metrics = await apiFetch<StripeMetrics>("/api/stripe/metrics");
+      setStripeMetrics(metrics);
+    } catch (error) {
+      // Silently fail - metrics may not be available if Stripe not configured
+      setStripeMetrics(null);
+    }
+  }, [apiFetch]);
+
+  const fetchStripeProducts = useCallback(async () => {
+    try {
+      const response = await apiFetch<{ items: StripeProduct[]; count: number }>("/api/stripe/products");
+      setStripeProducts(response.items ?? []);
+    } catch (error) {
+      setStripeProducts([]);
+    }
+  }, [apiFetch]);
+
+  const fetchStripeSubscriptions = useCallback(async () => {
+    try {
+      const response = await apiFetch<{ items: StripeSubscription[]; count: number }>("/api/stripe/subscriptions");
+      setStripeSubscriptions(response.items ?? []);
+    } catch (error) {
+      setStripeSubscriptions([]);
+    }
+  }, [apiFetch]);
+
+  const fetchStripeCustomers = useCallback(async () => {
+    try {
+      const response = await apiFetch<{ items: StripeCustomer[]; count: number }>("/api/stripe/customers");
+      setStripeCustomers(response.items ?? []);
+    } catch (error) {
+      setStripeCustomers([]);
+    }
+  }, [apiFetch]);
+
   const fetchAvailableChannels = useCallback(async () => {
     setChannelsLoading(true);
     try {
@@ -344,11 +506,26 @@ export default function DashboardPage() {
       setSelectedStrategyId(null);
       setAvailableChannels([]);
       setChannelsLoading(false);
+      setStripeConfig(null);
+      setStripeMetrics(null);
+      setStripeProducts([]);
+      setStripeSubscriptions([]);
+      setStripeCustomers([]);
       return;
     }
     (async () => {
       try {
-        await Promise.all([fetchProfile(), fetchStrategies(), fetchTelegramSuite(), fetchAvailableChannels()]);
+        await Promise.all([
+          fetchProfile(),
+          fetchStrategies(),
+          fetchTelegramSuite(),
+          fetchAvailableChannels(),
+          fetchStripeConfig(),
+          fetchStripeMetrics(),
+          fetchStripeProducts(),
+          fetchStripeSubscriptions(),
+          fetchStripeCustomers(),
+        ]);
       } catch (error) {
         if (error instanceof Error && error.message.includes("Sessão expirada")) {
           return;
@@ -356,7 +533,7 @@ export default function DashboardPage() {
         setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao carregar dados." });
       }
     })();
-  }, [token, fetchProfile, fetchStrategies, fetchTelegramSuite, fetchAvailableChannels]);
+  }, [token, fetchProfile, fetchStrategies, fetchTelegramSuite, fetchAvailableChannels, fetchStripeConfig, fetchStripeMetrics, fetchStripeProducts, fetchStripeSubscriptions, fetchStripeCustomers]);
 
   useEffect(() => {
     if (!selectedStrategyId) {
@@ -416,22 +593,32 @@ export default function DashboardPage() {
     [apiBase]
   );
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     if (!token) {
       return;
     }
-    setToken(null);
-    setStrategies([]);
-    setSignalsMap({});
-    setTelegramStatus(null);
-    setChannelConfig(null);
-    setAdminProfile(null);
-    setSignalsPage(0);
-    setBanner({ type: "success", message: "Sessão encerrada." });
-    if (typeof window !== "undefined") {
-      window.localStorage.removeItem(STORAGE_KEY);
+    setActionLoading("logout");
+    try {
+      // Call backend to delete all strategies and clear history
+      await apiFetch("/api/admin/logout", { method: "POST" });
+    } catch (error) {
+      // Continue with logout even if cleanup fails
+      console.error("Error during logout cleanup:", error);
+    } finally {
+      setActionLoading(null);
+      setToken(null);
+      setStrategies([]);
+      setSignalsMap({});
+      setTelegramStatus(null);
+      setChannelConfig(null);
+      setAdminProfile(null);
+      setSignalsPage(0);
+      setBanner({ type: "success", message: "Sessão encerrada e dados limpos." });
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
     }
-  }, [token]);
+  }, [token, apiFetch]);
 
   const handleSelectStrategy = useCallback((id: number | null) => {
     setSelectedStrategyId(id);
@@ -584,6 +771,56 @@ const handleCreateStrategy = useCallback(
     [apiFetch, fetchTelegramSuite, setSignalsMap]
   );
 
+  const configureStripe = useCallback(
+    async (
+      mode: string,
+      testSecretKey: string,
+      testPublishableKey: string,
+      prodSecretKey: string,
+      prodPublishableKey: string,
+      webhookSecret: string
+    ) => {
+      setActionLoading("stripe-config");
+      try {
+        await apiFetch("/api/stripe/config", {
+          method: "POST",
+          body: JSON.stringify({
+            mode,
+            test_secret_key: testSecretKey,
+            test_publishable_key: testPublishableKey,
+            prod_secret_key: prodSecretKey,
+            prod_publishable_key: prodPublishableKey,
+            webhook_secret: webhookSecret,
+          }),
+        });
+        await fetchStripeConfig();
+        setBanner({ type: "success", message: "Stripe configurado com sucesso." });
+      } catch (error) {
+        setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao configurar Stripe." });
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [apiFetch, fetchStripeConfig]
+  );
+
+  const testStripeSubscription = useCallback(async () => {
+    setActionLoading("stripe-test");
+    try {
+      const result = await apiFetch<{ success: boolean; message: string }>("/api/stripe/test-subscription", {
+        method: "POST",
+      });
+      setBanner({ type: "success", message: result.message || "Assinatura de teste criada com sucesso." });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao criar assinatura de teste.";
+      setBanner({ type: "error", message });
+      throw error;
+    } finally {
+      setActionLoading(null);
+    }
+  }, [apiFetch]);
+
   const activeStrategy = useMemo(() => strategies.find(item => item.id === selectedStrategyId), [strategies, selectedStrategyId]);
   const activeSignals = selectedStrategyId ? signalsMap[selectedStrategyId] ?? [] : [];
 
@@ -605,20 +842,12 @@ const handleCreateStrategy = useCallback(
       setActiveTab={setActiveTab}
       onLogout={handleLogout}
       banner={banner}
+      logoutLoading={actionLoading === "logout"}
     >
       {activeTab === "home" && (
         <HomeTab
-          strategies={strategies}
-          selectedStrategyId={selectedStrategyId}
-          onSelectStrategy={handleSelectStrategy}
-          signals={activeSignals}
-          onRefreshSignals={() => (selectedStrategyId ? fetchSignals(selectedStrategyId) : Promise.resolve())}
-          loading={actionLoading === "refresh-signals"}
-          telegramStatus={telegramStatus}
-          signalsPage={signalsPage}
-          onChangePage={setSignalsPage}
-          onClearHistory={() => controlCapture("clear-history")}
-          clearHistoryLoading={actionLoading === "capture-clear-history"}
+          metrics={stripeMetrics}
+          onRefreshMetrics={fetchStripeMetrics}
         />
       )}
       {activeTab === "strategies" && (
@@ -645,6 +874,15 @@ const handleCreateStrategy = useCallback(
           onLogoutTelegram={logoutTelegramSession}
         />
       )}
+      {activeTab === "stripe" && (
+        <StripeTab
+          config={stripeConfig}
+          actionLoading={actionLoading}
+          onConfigure={configureStripe}
+          onRefresh={fetchStripeConfig}
+          onTestSubscription={testStripeSubscription}
+        />
+      )}
       {activeTab === "signals" && (
         <SignalsTab
           strategies={strategies}
@@ -657,6 +895,25 @@ const handleCreateStrategy = useCallback(
           onChangePage={setSignalsPage}
           onClearHistory={() => controlCapture("clear-history")}
           clearHistoryLoading={actionLoading === "capture-clear-history"}
+        />
+      )}
+      {activeTab === "produtos" && (
+        <ProdutosTab
+          products={stripeProducts}
+          subscriptions={stripeSubscriptions}
+          actionLoading={actionLoading}
+          onRefresh={async () => {
+            await Promise.all([fetchStripeProducts(), fetchStripeSubscriptions()]);
+          }}
+          apiFetch={apiFetch}
+          setBanner={setBanner}
+        />
+      )}
+      {activeTab === "clientes" && (
+        <ClientesTab
+          customers={stripeCustomers}
+          actionLoading={actionLoading}
+          onRefresh={fetchStripeCustomers}
         />
       )}
     </DashboardLayout>
@@ -680,9 +937,8 @@ function LoginView({ loading, onLogin }: LoginViewProps) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-slate-100">
       <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-800 bg-slate-900/80 p-8 shadow-2xl shadow-black/40">
-        <div className="space-y-2 text-center">
+        <div className="text-center">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-50">Momentum Admin</h1>
-          <p className="text-sm text-slate-400">Acesse com seu e-mail administrativo para gerenciar o painel.</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
@@ -713,9 +969,6 @@ function LoginView({ loading, onLogin }: LoginViewProps) {
             {loading ? "Autenticando..." : "Entrar"}
           </button>
         </form>
-        <p className="text-center text-xs text-slate-500">
-          Certifique-se de configurar as variáveis ADMIN_EMAIL, ADMIN_PASSWORD e ADMIN_TOKEN_SECRET no servidor antes de publicar.
-        </p>
       </div>
     </div>
   );
@@ -726,10 +979,11 @@ type DashboardLayoutProps = {
   setActiveTab: (tab: TabKey) => void;
   onLogout: () => void;
   banner: Banner | null;
+  logoutLoading: boolean;
   children: ReactNode;
 };
 
-function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }: DashboardLayoutProps) {
+function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, logoutLoading, children }: DashboardLayoutProps) {
   const navMap = NAV_ITEMS.reduce<Partial<Record<TabKey, NavItem>>>((acc, item) => {
     acc[item.id] = item;
     return acc;
@@ -751,15 +1005,17 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
     <div className="flex min-h-screen bg-slate-950 text-slate-100">
       <aside className="hidden w-72 border-r border-slate-900 bg-slate-950/85 px-5 py-8 md:flex">
         <div className="flex h-full w-full flex-col">
-          <div className="mb-8">
+          <div className="mb-16 text-center">
             <h2 className="text-xl font-semibold uppercase tracking-[0.5em] text-blue-300">Momentum</h2>
-            <p className="mt-2 text-xs text-slate-500">Plataforma de monitoramento</p>
+            <p className="mt-2 text-xs text-slate-500">Painel Administrativo</p>
           </div>
           <nav className="flex-1 space-y-6">
             {desktopSections.map(section => (
               <div key={section.title}>
-                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{section.title}</p>
-                <div className="mt-3 space-y-2">
+                {section.title !== "Resumo" && (
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-slate-500">{section.title}</p>
+                )}
+                <div className={section.title !== "Resumo" ? "mt-3 space-y-2" : "space-y-2"}>
                   {section.items.map(item => (
                     <button
                       key={item.id}
@@ -789,9 +1045,10 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
           </nav>
           <button
             onClick={onLogout}
-            className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+            disabled={logoutLoading}
+            className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sair
+            {logoutLoading ? "Encerrando..." : "Sair"}
           </button>
         </div>
       </aside>
@@ -801,9 +1058,10 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
             <span className="text-base font-semibold uppercase tracking-[0.6em] text-blue-300">Momentum</span>
             <button
               onClick={onLogout}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300"
+              disabled={logoutLoading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-200 transition hover:border-red-500/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Sair
+              {logoutLoading ? "Encerrando..." : "Sair"}
             </button>
           </div>
         </header>
@@ -849,149 +1107,125 @@ function DashboardLayout({ activeTab, setActiveTab, onLogout, banner, children }
 }
 
 type HomeTabProps = {
-  strategies: StrategyItem[];
-  selectedStrategyId: number | null;
-  onSelectStrategy: (id: number | null) => void;
-  signals: StrategySignal[];
-  onRefreshSignals: () => Promise<void>;
-  loading: boolean;
-  telegramStatus: TelegramStatus | null;
-  signalsPage: number;
-  onChangePage: Dispatch<SetStateAction<number>>;
-  onClearHistory: () => Promise<void>;
-  clearHistoryLoading: boolean;
+  metrics: StripeMetrics | null;
+  onRefreshMetrics: () => Promise<void>;
 };
 
-function HomeTab({
-  strategies,
-  selectedStrategyId,
-  onSelectStrategy,
-  signals,
-  onRefreshSignals,
-  loading,
-  telegramStatus,
-  signalsPage,
-  onChangePage,
-  onClearHistory,
-  clearHistoryLoading,
-}: HomeTabProps) {
-  const totalStrategies = strategies.length;
-  const activeCount = strategies.filter(item => item.status === "active").length;
-  const pausedCount = strategies.filter(item => item.status === "paused").length;
-  const selectedStrategy = strategies.find(item => item.id === selectedStrategyId) ?? null;
-  const sanitisedSignals = useMemo(() => sanitizeSignals(signals), [signals]);
-  const HOME_SIGNAL_LIMIT = 3;
-  const totalPages = Math.max(1, Math.ceil(sanitisedSignals.length / HOME_SIGNAL_LIMIT));
-  useEffect(() => {
-    if (signalsPage > totalPages - 1) {
-      onChangePage(Math.max(0, totalPages - 1));
-    }
-  }, [signalsPage, totalPages, onChangePage]);
-  const currentPage = Math.min(signalsPage, totalPages - 1);
-  const startIndex = currentPage * HOME_SIGNAL_LIMIT;
-  const paginatedSignals = sanitisedSignals.slice(startIndex, startIndex + HOME_SIGNAL_LIMIT);
+function HomeTab({ metrics, onRefreshMetrics }: HomeTabProps) {
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(amount);
+  };
 
-  const handleSelect = (value: string) => {
-    if (!value) {
-      onSelectStrategy(null);
-      return;
-    }
-    const parsed = Number(value);
-    if (!Number.isNaN(parsed)) {
-      onSelectStrategy(parsed);
-    }
+  const formatPercent = (value: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "percent",
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(value / 100);
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <SummaryCard title="Estratégias" subtitle="Total configuradas" value={totalStrategies.toString()} accent="blue" />
-        <SummaryCard title="Ativas" subtitle="Capturando sinais" value={activeCount.toString()} accent="emerald" />
-        <SummaryCard title="Pausadas" subtitle="Aguardando retomada" value={pausedCount.toString()} accent="amber" />
+    <div className="space-y-6">
+      <section className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-slate-50">Dashboard de Métricas</h2>
+          <p className="text-sm text-slate-500">Visão geral do desempenho financeiro</p>
+        </div>
+        <button
+          onClick={onRefreshMetrics}
+          className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300"
+        >
+          Atualizar
+        </button>
       </section>
 
-      <section className="hidden flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30 md:flex">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-50">Sinais interpretados</h3>
-            <p className="text-sm text-slate-500">Filtre por estratégia para acompanhar as últimas entradas estruturadas pela IA.</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={selectedStrategyId ?? ""}
-              onChange={event => handleSelect(event.target.value)}
-              className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            >
-              <option value="" disabled>
-                Selecione uma estratégia
-              </option>
-              {strategies.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.name} {item.status !== "active" ? `(${item.status})` : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={onRefreshSignals}
-              disabled={!selectedStrategyId || loading}
-              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-            >
-              Atualizar
-            </button>
-            <button
-              onClick={onClearHistory}
-              disabled={clearHistoryLoading}
-              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
-            >
-              {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
-            </button>
-          </div>
+      {!metrics ? (
+        <div className="rounded-2xl border border-slate-900 bg-slate-950/70 p-12 text-center shadow-lg shadow-black/30">
+          <p className="text-slate-400">Configure o Stripe para visualizar as métricas.</p>
         </div>
-        <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
-          {!selectedStrategy ? (
-            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-              Escolha uma estratégia para visualizar os sinais mais recentes.
+      ) : (
+        <>
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              title="MRR"
+              subtitle="Receita recorrente mensal"
+              value={formatCurrency(metrics.mrr)}
+              accent="blue"
+            />
+            <SummaryCard
+              title="Assinaturas"
+              subtitle="Total ativas"
+              value={metrics.total_subscriptions.toString()}
+              accent="emerald"
+            />
+            <SummaryCard
+              title="Clientes"
+              subtitle="Total cadastrados"
+              value={metrics.total_customers.toString()}
+              accent="slate"
+            />
+            <SummaryCard
+              title="Churn (30d)"
+              subtitle="Taxa de cancelamento"
+              value={formatPercent(metrics.churn_rate_30d)}
+              accent="amber"
+            />
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+              <h3 className="text-lg font-semibold text-slate-50">Novas Assinaturas (30 dias)</h3>
+              <p className="mt-4 text-4xl font-bold text-emerald-300">{metrics.new_subscriptions_30d}</p>
+              <p className="mt-2 text-xs text-slate-500">Novos clientes no último mês</p>
             </div>
-          ) : sanitisedSignals.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
-              Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
+
+            <div className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+              <h3 className="text-lg font-semibold text-slate-50">Cancelamentos (30 dias)</h3>
+              <p className="mt-4 text-4xl font-bold text-red-300">{metrics.canceled_subscriptions_30d}</p>
+              <p className="mt-2 text-xs text-slate-500">Cancelamentos no último mês</p>
             </div>
-          ) : (
-            <div className="px-4 py-4">
-              <div className="space-y-3">
-                {paginatedSignals.map((signal, index) => (
-                  <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
-                ))}
+          </section>
+
+          <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+            <h3 className="mb-4 text-lg font-semibold text-slate-50">Assinaturas por Status</h3>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4">
+                <p className="text-xs uppercase tracking-widest text-emerald-300">Ativas</p>
+                <p className="mt-2 text-2xl font-bold text-emerald-100">
+                  {metrics.subscriptions_by_status.active}
+                </p>
               </div>
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
-                  <span>Página {currentPage + 1} de {totalPages}</span>
-                  <button
-                    onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
-                    disabled={currentPage === 0}
-                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
-                    disabled={currentPage >= totalPages - 1}
-                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              )}
+              <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 p-4">
+                <p className="text-xs uppercase tracking-widest text-blue-300">Período de teste</p>
+                <p className="mt-2 text-2xl font-bold text-blue-100">
+                  {metrics.subscriptions_by_status.trialing}
+                </p>
+              </div>
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                <p className="text-xs uppercase tracking-widest text-amber-300">Vencidas</p>
+                <p className="mt-2 text-2xl font-bold text-amber-100">
+                  {metrics.subscriptions_by_status.past_due}
+                </p>
+              </div>
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+                <p className="text-xs uppercase tracking-widest text-red-300">Canceladas</p>
+                <p className="mt-2 text-2xl font-bold text-red-100">
+                  {metrics.subscriptions_by_status.canceled}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-900/70 p-4">
+                <p className="text-xs uppercase tracking-widest text-slate-400">Incompletas</p>
+                <p className="mt-2 text-2xl font-bold text-slate-200">
+                  {metrics.subscriptions_by_status.incomplete}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 text-sm text-slate-400 md:hidden">
-        <h3 className="text-base font-semibold text-slate-100">Sinais interpretados</h3>
-        <p className="mt-2">Acesse a aba “Sinais” na barra inferior para acompanhar os sinais processados em detalhes.</p>
-      </section>
-
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -1046,78 +1280,84 @@ function SignalsTab({
   };
 
   return (
-    <div className="flex min-h-full flex-col gap-4 md:hidden">
-      <header className="space-y-2 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <h2 className="text-lg font-semibold text-slate-50">Sinais interpretados</h2>
-        <p className="text-sm text-slate-500">Selecione uma estratégia para acompanhar as entradas geradas pela IA.</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={selectedStrategyId ?? ""}
-            onChange={event => handleSelect(event.target.value)}
-            className="flex-1 appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-          >
-            <option value="" disabled>
-              Selecione uma estratégia
-            </option>
-            {strategies.map(item => (
-              <option key={item.id} value={item.id}>
-                {item.name} {item.status !== "active" ? `(${item.status})` : ""}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={onRefreshSignals}
-            disabled={!selectedStrategyId || loading}
-            className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-          >
-            Atualizar
-          </button>
-          <button
-            onClick={onClearHistory}
-            disabled={clearHistoryLoading}
-            className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
-          >
-            {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
-          </button>
-        </div>
-      </header>
-
-      {!selectedStrategy ? (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
-          Escolha uma estratégia acima para visualizar os sinais mais recentes.
-        </div>
-      ) : sanitisedSignals.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center rounded-2xl border border-slate-900 bg-slate-950/70 px-6 py-10 text-center text-slate-400">
-          Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
-        </div>
-      ) : (
-        <div className="flex flex-1 flex-col rounded-2xl border border-slate-900 bg-slate-950/70 px-3 py-4 shadow-lg shadow-black/30">
-          <div className="space-y-3">
-            {paginatedSignals.map((signal, index) => (
-              <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
-            ))}
+    <div className="flex min-h-full flex-col gap-4">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-50">Sinais interpretados</h2>
+            <p className="text-sm text-slate-500">Selecione uma estratégia para acompanhar as entradas geradas pela IA.</p>
           </div>
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
-              <span>Página {currentPage + 1} de {totalPages}</span>
-              <button
-                onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
-                disabled={currentPage === 0}
-                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
-                disabled={currentPage >= totalPages - 1}
-                className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
-              >
-                Próxima
-              </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={selectedStrategyId ?? ""}
+              onChange={event => handleSelect(event.target.value)}
+              className="appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            >
+              <option value="" disabled>
+                Selecione uma estratégia
+              </option>
+              {strategies.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} {item.status !== "active" ? `(${item.status})` : ""}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={onRefreshSignals}
+              disabled={!selectedStrategyId || loading}
+              className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+            >
+              Atualizar
+            </button>
+            <button
+              onClick={onClearHistory}
+              disabled={clearHistoryLoading}
+              className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
+            >
+              {clearHistoryLoading ? "Limpando..." : "Limpar histórico"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex-1 overflow-hidden rounded-xl border border-slate-900 bg-slate-900/40">
+          {!selectedStrategy ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Escolha uma estratégia para visualizar os sinais mais recentes.
+            </div>
+          ) : sanitisedSignals.length === 0 ? (
+            <div className="flex h-full items-center justify-center px-6 py-10 text-center text-slate-400">
+              Nenhum sinal processado nas últimas 24h para {selectedStrategy.name}.
+            </div>
+          ) : (
+            <div className="px-4 py-4">
+              <div className="space-y-3">
+                {paginatedSignals.map((signal, index) => (
+                  <SignalCard key={signal.id} signal={signal} sequence={sanitisedSignals.length - (startIndex + index)} />
+                ))}
+              </div>
+              {totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-end gap-2 text-xs text-slate-400">
+                  <span>Página {currentPage + 1} de {totalPages}</span>
+                  <button
+                    onClick={() => onChangePage(prev => Math.max(0, prev - 1))}
+                    disabled={currentPage === 0}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    onClick={() => onChangePage(prev => Math.min(totalPages - 1, prev + 1))}
+                    disabled={currentPage >= totalPages - 1}
+                    className="rounded-lg border border-slate-800 px-3 py-1 font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      </section>
     </div>
   );
 }
@@ -1254,7 +1494,7 @@ function StrategiesTab({
   const [name, setName] = useState("");
   const [selectedChannel, setSelectedChannel] = useState("");
 
-  const STRATEGY_LIMIT = 4;
+  const STRATEGY_LIMIT = 2;
   const reachedLimit = strategies.length >= STRATEGY_LIMIT;
 
   const statusAppearance: Record<StrategyItem["status"], { label: string; badge: string }> = {
@@ -1334,64 +1574,53 @@ function StrategiesTab({
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
-        <div className="rounded-2xl border border-slate-900 bg-slate-950/60 p-6">
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
-            <h3 className="text-2xl font-semibold text-slate-50">Nova estratégia</h3>
-            <p className="text-xs text-slate-500">Defina um nome e selecione um canal vinculado. A lista é sincronizada automaticamente.</p>
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-widest text-slate-500">Configuração de estratégia</p>
+          <h3 className="text-lg font-semibold text-slate-50">Nova estratégia</h3>
+        </div>
+
+        <form className="mt-6 space-y-4" onSubmit={handleCreate}>
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
+            <input
+              value={name}
+              onChange={event => setName(event.target.value)}
+              disabled={reachedLimit}
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              placeholder="Ex: Estrategia #1"
+              required
+            />
           </div>
 
-          <form className="mt-6 space-y-4" onSubmit={handleCreate}>
-            <div>
-              <label className="text-xs uppercase tracking-widest text-slate-400">Nome da estratégia</label>
-              <input
-                value={name}
-                onChange={event => setName(event.target.value)}
-                disabled={reachedLimit}
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                placeholder="Ex.: GBP Scalper"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="text-xs uppercase tracking-widest text-slate-400">Canal monitorado</label>
-              <select
-                value={selectedChannel}
-                onChange={event => setSelectedChannel(event.target.value)}
-                className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
-                required
-                disabled={channelOptions.length === 0 || reachedLimit}
-              >
-                <option value="" disabled>
-                  Selecione um canal
-                </option>
-                {channelOptions.map(option => (
-                  <option key={option.id} value={option.id}>
-                    {option.title}
-                    {option.username ? ` (@${option.username})` : ""}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-2 text-xs text-slate-500">
-                {channelOptions.length
-                  ? "Escolha um canal listado; a lista é sincronizada automaticamente a cada 10 segundos."
-                  : "Nenhum canal disponível no momento. Aguarde a próxima sincronização automática."}
-              </p>
-            </div>
-
-            <button
-              type="submit"
-              disabled={creationDisabled}
-              className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Selecionar um canal</label>
+            <select
+              value={selectedChannel}
+              onChange={event => setSelectedChannel(event.target.value)}
+              className="mt-1 w-full appearance-none rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-sm text-slate-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              required
+              disabled={channelOptions.length === 0 || reachedLimit}
             >
-              {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
-            </button>
-            {reachedLimit && (
-              <p className="text-center text-xs text-slate-500">Remova uma estratégia existente para liberar espaço.</p>
-            )}
-          </form>
-        </div>
+              <option value="" disabled>
+                Selecione um canal
+              </option>
+              {channelOptions.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.title}
+                  {option.username ? ` (@${option.username})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="submit"
+            disabled={creationDisabled}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {reachedLimit ? "Limite atingido" : actionLoading === "create-strategy" ? "Criando..." : "Adicionar estratégia"}
+          </button>
+        </form>
       </section>
 
       <section className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
@@ -1428,22 +1657,19 @@ function StrategiesTab({
 
               return (
                 <article key={strategy.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
-                  <header className="flex flex-col gap-2 text-slate-100 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
-                      </div>
-                      <p className="text-[11px] uppercase tracking-tight text-slate-500">{channelLabel}</p>
+                  <header className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-lg font-semibold text-slate-50">{strategy.name}</h4>
+                      <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${appearance.badge}`}>{appearance.label}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-tight text-slate-500">
-                      <span>Atualizada {updatedAgo}</span>
-                      <span className="hidden sm:inline-block">•</span>
+                      <span>{channelLabel}</span>
+                      <span>•</span>
                       <span>Último sinal {lastSignalAgo}</span>
                     </div>
                   </header>
 
-                  <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="grid gap-2 grid-cols-2">
                     {canActivate && (
                       <button
                         type="button"
@@ -1538,28 +1764,8 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
     }
   };
 
-  const summaryCards = [
-    {
-      title: status?.connected ? "Sessão sincronizada" : "Aguardando conexão",
-      subtitle: "Conexão",
-      value: status?.connected ? "Online" : "Offline",
-      accent: status?.connected ? ("emerald" as const) : ("slate" as const)
-    },
-    {
-      title: status?.authorized ? status?.account?.display_name ?? "Conta validada" : "Informe o código recebido",
-      subtitle: "Autorização",
-      value: status?.authorized ? "Autorizada" : "Pendente",
-      accent: status?.authorized ? ("emerald" as const) : ("amber" as const)
-  ];
-
   return (
     <div className="space-y-8">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {summaryCards.map(card => (
-          <SummaryCard key={card.subtitle} title={card.title} subtitle={card.subtitle} value={card.value} accent={card.accent} />
-        ))}
-      </section>
-
       <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -1616,19 +1822,228 @@ function TelegramTab({ status, actionLoading, onRefresh, onSendCode, onVerifyCod
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-          <button
-            type="button"
-            onClick={onLogoutTelegram}
-            disabled={!isAuthorized || isLoggingOut}
-            className="h-14 w-full rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:text-red-50 disabled:border-slate-900 disabled:bg-slate-900/50 disabled:text-slate-500"
-          >
-            {isLoggingOut ? "Encerrando sessão..." : "Encerrar sessão"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onLogoutTelegram}
+          disabled={!isAuthorized || isLoggingOut}
+          className="mt-4 h-14 w-full rounded-lg border border-red-500/40 bg-red-500/10 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:text-red-50 disabled:border-slate-900 disabled:bg-slate-900/50 disabled:text-slate-500"
+        >
+          {isLoggingOut ? "Encerrando sessão..." : "Encerrar sessão"}
+        </button>
 
       </section>
 
+    </div>
+  );
+}
+
+type StripeTabProps = {
+  config: StripeConfig | null;
+  actionLoading: string | null;
+  onConfigure: (mode: string, testSecretKey: string, testPublishableKey: string, prodSecretKey: string, prodPublishableKey: string, webhookSecret: string) => Promise<void>;
+  onRefresh: () => Promise<void>;
+  onTestSubscription: () => Promise<unknown>;
+};
+
+function StripeTab({ config, actionLoading, onConfigure, onRefresh, onTestSubscription }: StripeTabProps) {
+  const [mode, setMode] = useState<string>("test");
+  const [testSecretKey, setTestSecretKey] = useState("");
+  const [testPublishableKey, setTestPublishableKey] = useState("");
+  const [prodSecretKey, setProdSecretKey] = useState("");
+  const [prodPublishableKey, setProdPublishableKey] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+
+  const isConfiguring = actionLoading === "stripe-config";
+  const isTesting = actionLoading === "stripe-test";
+
+  useEffect(() => {
+    if (config) {
+      setMode(config.mode);
+    }
+  }, [config]);
+
+  const handleConfigure = async () => {
+    if (isConfiguring) {
+      return;
+    }
+    try {
+      await onConfigure(mode, testSecretKey, testPublishableKey, prodSecretKey, prodPublishableKey, webhookSecret);
+      setTestSecretKey("");
+      setTestPublishableKey("");
+      setProdSecretKey("");
+      setProdPublishableKey("");
+      setWebhookSecret("");
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const handleTestSubscription = async () => {
+    if (isTesting) {
+      return;
+    }
+    try {
+      await onTestSubscription();
+    } catch {
+      /* handled upstream */
+    }
+  };
+
+  const currentMode = config?.mode || "test";
+  const isTestMode = currentMode === "test";
+  const testConfigured = config?.test_configured || false;
+  const prodConfigured = config?.production_configured || false;
+  const connected = config?.connected || false;
+
+  return (
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-50">Configuração Stripe</h3>
+            <p className="text-sm text-slate-500">Configure suas chaves de API para pagamentos e assinaturas.</p>
+          </div>
+          <button onClick={onRefresh} className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
+            Atualizar status
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-semibold text-slate-300">Modo:</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMode("test")}
+                className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
+                  mode === "test"
+                    ? "border-blue-500/40 bg-blue-500/10 text-blue-200"
+                    : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                Test
+              </button>
+              <button
+                onClick={() => setMode("production")}
+                className={`rounded-lg border px-4 py-2 text-xs font-semibold transition ${
+                  mode === "production"
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+                    : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-slate-700"
+                }`}
+              >
+                Production
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Test Mode Keys</h4>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Secret Key</label>
+                <input
+                  type="password"
+                  value={testSecretKey}
+                  onChange={event => setTestSecretKey(event.target.value)}
+                  placeholder="sk_test_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Publishable Key</label>
+                <input
+                  type="text"
+                  value={testPublishableKey}
+                  onChange={event => setTestPublishableKey(event.target.value)}
+                  placeholder="pk_test_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div className={`rounded-lg border px-3 py-2 text-xs ${testConfigured ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-900/60 text-slate-500"}`}>
+                {testConfigured ? "✓ Configurado" : "Não configurado"}
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+              <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Production Mode Keys</h4>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Secret Key</label>
+                <input
+                  type="password"
+                  value={prodSecretKey}
+                  onChange={event => setProdSecretKey(event.target.value)}
+                  placeholder="sk_live_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-widest text-slate-400">Publishable Key</label>
+                <input
+                  type="text"
+                  value={prodPublishableKey}
+                  onChange={event => setProdPublishableKey(event.target.value)}
+                  placeholder="pk_live_..."
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                />
+              </div>
+              <div className={`rounded-lg border px-3 py-2 text-xs ${prodConfigured ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-900/60 text-slate-500"}`}>
+                {prodConfigured ? "✓ Configurado" : "Não configurado"}
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Webhook Configuration</h4>
+            <div className="mt-3">
+              <label className="text-xs uppercase tracking-widest text-slate-400">Webhook Secret</label>
+              <input
+                type="password"
+                value={webhookSecret}
+                onChange={event => setWebhookSecret(event.target.value)}
+                placeholder="whsec_..."
+                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                Configure seu webhook endpoint em: <span className="font-mono text-slate-300">/api/stripe/webhook</span>
+              </p>
+            </div>
+            <div className={`mt-3 rounded-lg border px-3 py-2 text-xs ${config?.webhook_configured ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-slate-800 bg-slate-900/60 text-slate-500"}`}>
+              {config?.webhook_configured ? "✓ Webhook configurado" : "Webhook não configurado"}
+            </div>
+          </div>
+
+          <button
+            onClick={handleConfigure}
+            disabled={isConfiguring}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {isConfiguring ? "Salvando..." : "Salvar Configuração"}
+          </button>
+
+          <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-300">Status da Conexão</p>
+              <p className="text-xs text-slate-500">Modo atual: {isTestMode ? "Test" : "Production"}</p>
+            </div>
+            <div className={`rounded-full px-4 py-2 text-xs font-semibold uppercase ${connected ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border border-red-500/40 bg-red-500/10 text-red-200"}`}>
+              {connected ? "Conectado" : "Desconectado"}
+            </div>
+          </div>
+
+          {isTestMode && connected && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+              <h4 className="text-sm font-semibold text-amber-300">Testar Assinatura</h4>
+              <p className="mt-1 text-xs text-slate-400">Crie uma assinatura de teste para verificar a integração.</p>
+              <button
+                onClick={handleTestSubscription}
+                disabled={isTesting}
+                className="mt-3 w-full rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-200 transition hover:border-amber-400 hover:text-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isTesting ? "Criando..." : "Criar Assinatura de Teste"}
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1660,4 +2075,341 @@ function normaliseEntry(value: unknown): string {
     return trimmed;
   }
   return "NA";
+}
+
+type ProdutosTabProps = {
+  products: StripeProduct[];
+  subscriptions: StripeSubscription[];
+  actionLoading: string | null;
+  onRefresh: () => Promise<void>;
+  apiFetch: <T,>(path: string, init?: RequestInit) => Promise<T>;
+  setBanner: (banner: Banner | null) => void;
+};
+
+function ProdutosTab({ products, subscriptions, actionLoading, onRefresh, apiFetch, setBanner }: ProdutosTabProps) {
+  const [createProductName, setCreateProductName] = useState("");
+  const [createProductDescription, setCreateProductDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  const handleCreateProduct = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!createProductName.trim() || creating) {
+      return;
+    }
+    setCreating(true);
+    try {
+      await apiFetch("/api/stripe/products", {
+        method: "POST",
+        body: JSON.stringify({
+          name: createProductName.trim(),
+          description: createProductDescription.trim() || null,
+        }),
+      });
+      setCreateProductName("");
+      setCreateProductDescription("");
+      await onRefresh();
+      setBanner({ type: "success", message: "Produto criado com sucesso." });
+    } catch (error) {
+      setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao criar produto." });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCancelSubscription = async (subscriptionId: string) => {
+    setCancellingId(subscriptionId);
+    try {
+      await apiFetch(`/api/stripe/subscriptions/${subscriptionId}`, {
+        method: "DELETE",
+      });
+      await onRefresh();
+      setBanner({ type: "success", message: "Assinatura cancelada." });
+    } catch (error) {
+      setBanner({ type: "error", message: error instanceof Error ? error.message : "Erro ao cancelar assinatura." });
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const formatCurrency = (amount: number | null, currency: string) => {
+    if (amount === null) return "N/A";
+    const value = amount / 100;
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).format(value);
+  };
+
+  const formatDate = (timestamp: number) => {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(timestamp * 1000));
+  };
+
+  const statusBadge = (status: string) => {
+    const badges: Record<string, string> = {
+      active: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+      trialing: "border-blue-500/40 bg-blue-500/10 text-blue-200",
+      past_due: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+      canceled: "border-red-500/40 bg-red-500/10 text-red-200",
+      incomplete: "border-slate-700 bg-slate-900/70 text-slate-300",
+    };
+    return badges[status] || badges.incomplete;
+  };
+
+  return (
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-widest text-slate-500">Gestão de produtos</p>
+          <h3 className="text-lg font-semibold text-slate-50">Criar novo produto</h3>
+        </div>
+
+        <form className="mt-6 space-y-4" onSubmit={handleCreateProduct}>
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Nome do produto</label>
+            <input
+              value={createProductName}
+              onChange={event => setCreateProductName(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              placeholder="Ex: Plano Premium"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="text-xs uppercase tracking-widest text-slate-400">Descrição (opcional)</label>
+            <textarea
+              value={createProductDescription}
+              onChange={event => setCreateProductDescription(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-100 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              placeholder="Descrição do produto"
+              rows={3}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={creating || !createProductName.trim()}
+            className="w-full rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-xs font-semibold text-blue-200 transition hover:border-blue-400 hover:text-blue-100 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-600"
+          >
+            {creating ? "Criando..." : "Criar produto"}
+          </button>
+        </form>
+      </section>
+
+      <section className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Produtos configurados</p>
+            <h3 className="text-lg font-semibold text-slate-50">Lista de produtos</h3>
+          </div>
+          <button onClick={onRefresh} className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
+            Atualizar lista
+          </button>
+        </div>
+
+        {products.length === 0 ? (
+          <div className="rounded-xl border border-slate-900 bg-slate-900/40 p-6 text-slate-400">
+            Nenhum produto cadastrado. Utilize o formulário acima para criar o primeiro produto.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {products.map(product => (
+              <article key={product.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
+                <header className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-lg font-semibold text-slate-50">{product.name}</h4>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${product.active ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border border-slate-700 bg-slate-900/70 text-slate-300"}`}>
+                      {product.active ? "Ativo" : "Inativo"}
+                    </span>
+                  </div>
+                  {product.description && (
+                    <p className="text-sm text-slate-400">{product.description}</p>
+                  )}
+                  <p className="text-xs text-slate-500">ID: {product.id}</p>
+                </header>
+
+                {product.prices.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-widest text-slate-500">Preços configurados</p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {product.prices.map(price => (
+                        <div key={price.id} className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-100">
+                                {formatCurrency(price.amount, price.currency)}
+                              </p>
+                              {price.recurring && (
+                                <p className="text-xs text-slate-500">
+                                  {price.recurring.interval_count > 1
+                                    ? `A cada ${price.recurring.interval_count} ${price.recurring.interval}s`
+                                    : `Por ${price.recurring.interval}`}
+                                </p>
+                              )}
+                              {!price.recurring && (
+                                <p className="text-xs text-slate-500">Pagamento único</p>
+                              )}
+                            </div>
+                            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${price.active ? "border border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border border-slate-700 bg-slate-900/70 text-slate-300"}`}>
+                              {price.active ? "Ativo" : "Inativo"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-5 rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-slate-500">Assinaturas ativas</p>
+          <h3 className="text-lg font-semibold text-slate-50">Gerenciar assinaturas</h3>
+        </div>
+
+        {subscriptions.length === 0 ? (
+          <div className="rounded-xl border border-slate-900 bg-slate-900/40 p-6 text-slate-400">
+            Nenhuma assinatura cadastrada.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {subscriptions.map(subscription => (
+              <article key={subscription.id} className="space-y-4 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
+                <header className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-base font-semibold text-slate-50">
+                      {subscription.customer_email || subscription.customer_id}
+                    </h4>
+                    <span className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide border ${statusBadge(subscription.status)}`}>
+                      {subscription.status}
+                    </span>
+                    {subscription.cancel_at_period_end && (
+                      <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-200">
+                        Cancelando
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">ID: {subscription.id}</p>
+                </header>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm">
+                    <p className="text-[11px] uppercase tracking-widest text-slate-500">Criada em</p>
+                    <p className="mt-1 font-semibold text-slate-100">{formatDate(subscription.created)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm">
+                    <p className="text-[11px] uppercase tracking-widest text-slate-500">Próxima cobrança</p>
+                    <p className="mt-1 font-semibold text-slate-100">{formatDate(subscription.current_period_end)}</p>
+                  </div>
+                </div>
+
+                {subscription.items.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-widest text-slate-500">Itens</p>
+                    <div className="space-y-1">
+                      {subscription.items.map((item, index) => (
+                        <div key={index} className="rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2 text-sm text-slate-200">
+                          {formatCurrency(item.amount, item.currency)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleCancelSubscription(subscription.id)}
+                  disabled={cancellingId === subscription.id || subscription.status === "canceled"}
+                  className="w-full rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:border-red-400 hover:text-red-100 disabled:cursor-not-allowed disabled:border-slate-900 disabled:text-slate-600"
+                >
+                  {cancellingId === subscription.id ? "Cancelando..." : subscription.status === "canceled" ? "Cancelada" : "Cancelar assinatura"}
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+type ClientesTabProps = {
+  customers: StripeCustomer[];
+  actionLoading: string | null;
+  onRefresh: () => Promise<void>;
+};
+
+function ClientesTab({ customers, actionLoading, onRefresh }: ClientesTabProps) {
+  const formatDate = (timestamp: number) => {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(timestamp * 1000));
+  };
+
+  const formatCurrency = (amount: number, currency: string | null) => {
+    const curr = currency || "brl";
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: curr.toUpperCase(),
+    }).format(amount / 100);
+  };
+
+  return (
+    <div className="space-y-8">
+      <section className="rounded-2xl border border-slate-900 bg-slate-950/70 p-6 shadow-lg shadow-black/30">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-slate-500">Gestão de clientes</p>
+            <h3 className="text-lg font-semibold text-slate-50">Lista de clientes</h3>
+          </div>
+          <button onClick={onRefresh} className="rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:border-blue-500/50 hover:text-blue-300">
+            Atualizar lista
+          </button>
+        </div>
+
+        {customers.length === 0 ? (
+          <div className="mt-6 rounded-xl border border-slate-900 bg-slate-900/40 p-6 text-slate-400">
+            Nenhum cliente cadastrado no Stripe.
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {customers.map(customer => (
+              <article key={customer.id} className="space-y-3 rounded-2xl border border-slate-900 bg-slate-900/45 p-5 shadow-lg shadow-black/30">
+                <header className="space-y-1">
+                  <h4 className="text-lg font-semibold text-slate-50">
+                    {customer.name || customer.email || "Cliente sem nome"}
+                  </h4>
+                  {customer.email && customer.name && (
+                    <p className="text-sm text-slate-400">{customer.email}</p>
+                  )}
+                  <p className="text-xs text-slate-500">ID: {customer.id}</p>
+                </header>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm">
+                    <p className="text-[11px] uppercase tracking-widest text-slate-500">Criado em</p>
+                    <p className="mt-1 font-semibold text-slate-100">{formatDate(customer.created)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-800/80 bg-slate-950/60 px-3 py-2 text-sm">
+                    <p className="text-[11px] uppercase tracking-widest text-slate-500">Saldo</p>
+                    <p className="mt-1 font-semibold text-slate-100">
+                      {formatCurrency(customer.balance, customer.currency)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import sqlite3
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
@@ -83,9 +84,15 @@ class TelegramService:
         logger.info("Telegram client disconnected.")
 
     async def _ensure_connection(self) -> None:
-        if not self._client.is_connected():
-            await self._client.connect()
-        self._authorized = await self._client.is_user_authorized()
+        try:
+            if not self._client.is_connected():
+                await self._client.connect()
+            self._authorized = await self._client.is_user_authorized()
+        except sqlite3.OperationalError as exc:
+            logger.error("Database error during Telegram connection: %s", exc)
+            raise ValueError(
+                "Erro ao conectar com o Telegram. Verifique as permissões do banco de dados."
+            ) from exc
 
     async def _refresh_account_profile(self) -> None:
         if not self._authorized:

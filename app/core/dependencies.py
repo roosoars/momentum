@@ -22,14 +22,6 @@ def get_channel_service(container: ApplicationContainer = Depends(get_container)
     return container.channel_service
 
 
-def get_message_service(container: ApplicationContainer = Depends(get_container)):
-    return container.message_service
-
-
-def get_stream_manager(container: ApplicationContainer = Depends(get_container)):
-    return container.stream_manager
-
-
 def get_telegram_service(container: ApplicationContainer = Depends(get_container)):
     return container.telegram_service
 
@@ -52,3 +44,23 @@ def get_signal_parser(container: ApplicationContainer = Depends(get_container)):
 
 def get_admin_auth_service(container: ApplicationContainer = Depends(get_container)):
     return container.admin_auth_service
+
+
+def get_stripe_service(container: ApplicationContainer = Depends(get_container)):
+    return container.stripe_service
+
+
+def get_user_service(container: ApplicationContainer = Depends(get_container)):
+    return container.user_service
+
+
+def get_subscription_service(container: ApplicationContainer = Depends(get_container)):
+    return container.subscription_service
+
+
+def get_api_key_service(container: ApplicationContainer = Depends(get_container)):
+    return container.api_key_service
+
+
+def get_email_service(container: ApplicationContainer = Depends(get_container)):
+    return container.email_service
