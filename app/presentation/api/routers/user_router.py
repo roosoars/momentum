@@ -1,9 +1,12 @@
 """API router for user authentication and management."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.config import Settings
 from app.core.dependencies import (
     get_email_service,
+    get_settings,
     get_subscription_service,
     get_user_service,
 )
@@ -24,19 +27,21 @@ from app.services.user_service import UserService
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
+_bearer_scheme = HTTPBearer(auto_error=False)
+
 
 def get_current_user(
-    authorization: str = "",
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
     user_service: UserService = Depends(get_user_service),
 ) -> User:
     """Dependency to get current authenticated user."""
-    if not authorization.startswith("Bearer "):
+    if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization header",
         )
 
-    token = authorization[7:]
+    token = credentials.credentials
     payload = user_service.verify_token(token)
 
     if not payload:
@@ -72,6 +77,7 @@ async def register(
     request: UserRegisterRequest,
     user_service: UserService = Depends(get_user_service),
     email_service: EmailService = Depends(get_email_service),
+    settings: Settings = Depends(get_settings),
 ) -> UserRegisterResponse:
     """Register a new user."""
     try:
@@ -86,12 +92,10 @@ async def register(
         )
 
     # Send verification email
-    # In production, use actual base URL from environment
-    base_url = "http://localhost:3000"  # TODO: Get from env
     email_service.send_verification_email(
         to_email=user.email,
         verification_token=verification_token,
-        base_url=base_url,
+        base_url=settings.frontend_base_url,
     )
 
     return UserRegisterResponse(
@@ -151,6 +155,7 @@ async def resend_verification(
     request: UserResendVerificationRequest,
     user_service: UserService = Depends(get_user_service),
     email_service: EmailService = Depends(get_email_service),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
     """Resend verification email."""
     user = user_service.get_by_email(request.email)
@@ -174,11 +179,10 @@ async def resend_verification(
         )
 
     # Send verification email
-    base_url = "http://localhost:3000"  # TODO: Get from env
     email_service.send_verification_email(
         to_email=user.email,
         verification_token=verification_token,
-        base_url=base_url,
+        base_url=settings.frontend_base_url,
     )
 
     return {"message": "Verification email sent"}

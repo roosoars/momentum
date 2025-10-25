@@ -25,6 +25,7 @@ class Settings:
         self.admin_token_exp_minutes = self._get_int("ADMIN_TOKEN_EXP_MINUTES", default=60 * 24)
         self.admin_default_email = os.getenv("ADMIN_EMAIL")
         self.admin_default_password = os.getenv("ADMIN_PASSWORD")
+        self.frontend_base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
         origins = os.getenv("CORS_ALLOW_ORIGINS")
         if origins:
             self.cors_allow_origins = [item.strip() for item in origins.split(",") if item.strip()]
